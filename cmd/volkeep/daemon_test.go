@@ -1,0 +1,201 @@
+package main
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/docker/docker/api/types/mount"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+
+	"github.com/deadnews/volkeep/internal/dockerx"
+)
+
+func SkipIfNoTestcontainers(t *testing.T) {
+	t.Helper()
+	if os.Getenv("TESTCONTAINERS") != "1" {
+		t.Skip("Skipping integration test, set TESTCONTAINERS=1 to run it.")
+	}
+}
+
+func setupDaemon(t *testing.T) (context.Context, *dockerx.Client, *Daemon) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	t.Cleanup(cancel)
+
+	repoVol := "volkeep_test_" + strings.ReplaceAll(t.Name(), "/", "_")
+	t.Cleanup(func() {
+		_ = exec.CommandContext(context.Background(), "docker", "volume", "rm", "-f", repoVol).Run()
+	})
+
+	cfg := &Config{
+		RetentionDays:  5,
+		Check:          true,
+		ResticImage:    defaultResticImage,
+		HostTag:        "test-host",
+		RepoVolume:     repoVol,
+		ResticRepo:     workerRepoPath,
+		ResticPassword: "test-pw",
+	}
+
+	dx, err := dockerx.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = dx.Close() })
+
+	d := NewDaemon(cfg, dx)
+	require.NoError(t, dx.Pull(ctx, cfg.ResticImage))
+	require.NoError(t, d.initRepo(ctx))
+
+	return ctx, dx, d
+}
+
+func snapshots(ctx context.Context, t *testing.T, d *Daemon) string {
+	t.Helper()
+	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Image:  d.cfg.ResticImage,
+		Args:   []string{"--no-cache", "snapshots", "--no-lock"},
+		Env:    d.env,
+		Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: d.cfg.RepoVolume, Target: workerRepoPath}},
+	})
+	require.NoError(t, err)
+	require.Zero(t, res.ExitCode, "snapshots probe failed: %s", res.Logs)
+	return res.Logs
+}
+
+func TestDaemon_RunOnce(t *testing.T) {
+	SkipIfNoTestcontainers(t)
+	ctx, _, d := setupDaemon(t)
+
+	app, err := testcontainers.Run(ctx, "busybox:musl",
+		testcontainers.WithCmd("sh", "-c", "echo hello > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
+		testcontainers.WithLabels(map[string]string{
+			"volkeep.enable":         "true",
+			"volkeep.stop":           "true",
+			"volkeep.retention-days": "1",
+		}),
+		testcontainers.WithMounts(testcontainers.VolumeMount("volkeep_test_runonce", "/data")),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
+
+	time.Sleep(500 * time.Millisecond)
+
+	d.runOnce(ctx)
+
+	logs := snapshots(ctx, t, d)
+	assert.Contains(t, logs, "volkeep_test_runonce", "snapshot for our volume should be listed")
+}
+
+func TestDaemon_PreStoppedStaysDown(t *testing.T) {
+	SkipIfNoTestcontainers(t)
+	ctx, dx, d := setupDaemon(t)
+
+	app, err := testcontainers.Run(ctx, "busybox:musl",
+		testcontainers.WithCmd("sh", "-c", "echo hi > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
+		testcontainers.WithLabels(map[string]string{
+			"volkeep.enable": "true",
+			"volkeep.stop":   "true",
+		}),
+		testcontainers.WithMounts(testcontainers.VolumeMount("volkeep_test_prestopped", "/data")),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
+
+	time.Sleep(500 * time.Millisecond)
+
+	require.NoError(t, dx.Stop(ctx, app.GetContainerID()))
+	// Stop can return before the daemon's container listing reflects it;
+	// wait so discovery sees the container as already stopped.
+	require.Eventually(t, func() bool {
+		state, err := app.State(ctx)
+		return err == nil && !state.Running
+	}, 10*time.Second, 100*time.Millisecond)
+
+	d.runOnce(ctx)
+
+	state, err := app.State(ctx)
+	require.NoError(t, err)
+	assert.False(t, state.Running, "pre-stopped container must remain stopped")
+}
+
+func TestDaemon_RestartsOnShutdown(t *testing.T) {
+	SkipIfNoTestcontainers(t)
+	ctx, _, d := setupDaemon(t)
+
+	app, err := testcontainers.Run(ctx, "busybox:musl",
+		testcontainers.WithCmd("sh", "-c", "echo hi > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
+		testcontainers.WithLabels(map[string]string{
+			"volkeep.enable": "true",
+			"volkeep.stop":   "true",
+		}),
+		testcontainers.WithMounts(testcontainers.VolumeMount("volkeep_test_restart", "/data")),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
+
+	time.Sleep(500 * time.Millisecond)
+
+	group := []Target{{
+		Container: dockerx.Container{ID: app.GetContainerID(), Name: "app", Running: true},
+		Volume:    dockerx.Volume{Name: "volkeep_test_restart"},
+		Stop:      true,
+	}}
+
+	// Cancel the pass once the daemon has stopped the container, simulating a
+	// SIGTERM mid-backup; the restart must still bring it back up.
+	passCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		for {
+			if state, err := app.State(passCtx); err == nil && !state.Running {
+				cancel()
+				return
+			}
+			select {
+			case <-passCtx.Done():
+				return
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}()
+
+	d.runGroup(passCtx, group)
+
+	require.Eventually(t, func() bool {
+		state, err := app.State(ctx)
+		return err == nil && state.Running
+	}, 30*time.Second, 200*time.Millisecond, "container the daemon stopped must be restarted on shutdown")
+}
+
+func TestDaemon_MultiVolume(t *testing.T) {
+	SkipIfNoTestcontainers(t)
+	ctx, _, d := setupDaemon(t)
+
+	app, err := testcontainers.Run(ctx, "busybox:musl",
+		testcontainers.WithCmd("sh", "-c", "echo a > /data1/a; echo b > /data2/b; trap 'exit 0' TERM; sleep 3600 & wait"),
+		testcontainers.WithLabels(map[string]string{
+			"volkeep.enable": "true",
+			"volkeep.stop":   "true",
+		}),
+		testcontainers.WithMounts(
+			testcontainers.VolumeMount("volkeep_test_mv_v1", "/data1"),
+			testcontainers.VolumeMount("volkeep_test_mv_v2", "/data2"),
+		),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
+
+	time.Sleep(500 * time.Millisecond)
+
+	d.runOnce(ctx)
+
+	logs := snapshots(ctx, t, d)
+	assert.Contains(t, logs, "volkeep_test_mv_v1")
+	assert.Contains(t, logs, "volkeep_test_mv_v2")
+}

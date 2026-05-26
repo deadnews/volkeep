@@ -1,0 +1,72 @@
+// Package restic builds argv and env for restic worker containers.
+package restic
+
+import (
+	"strconv"
+	"strings"
+)
+
+// ExitRepoMissing is restic's exit code for a non-existent repository.
+const ExitRepoMissing = 10
+
+// Env carries credentials forwarded to every worker; workers do not inherit daemon env.
+type Env struct {
+	Repository   string
+	Password     string
+	AwsAccessKey string
+	AwsSecretKey string
+}
+
+// AsSlice returns env in KEY=VAL form; unset AWS_* keys are omitted.
+func (e Env) AsSlice() []string {
+	out := []string{
+		"RESTIC_REPOSITORY=" + e.Repository,
+		"RESTIC_PASSWORD=" + e.Password,
+	}
+	if e.AwsAccessKey != "" {
+		out = append(out, "AWS_ACCESS_KEY_ID="+e.AwsAccessKey)
+	}
+	if e.AwsSecretKey != "" {
+		out = append(out, "AWS_SECRET_ACCESS_KEY="+e.AwsSecretKey)
+	}
+	return out
+}
+
+// RcloneEnv returns the RCLONE_* entries from environ.
+func RcloneEnv(environ []string) []string {
+	var out []string
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, "RCLONE_") {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// Workers are ephemeral, so the restic cache cannot be reused between runs.
+const noCache = "--no-cache"
+
+// InitArgs returns argv for `restic init`.
+func InitArgs() []string { return []string{noCache, "init"} }
+
+// CatConfigArgs returns argv for probing repo existence.
+func CatConfigArgs() []string { return []string{noCache, "cat", "config"} }
+
+// CheckArgs returns argv for a structural integrity check.
+func CheckArgs() []string { return []string{noCache, "check"} }
+
+// BackupArgs returns argv for backing up /data tagged for retention scoping.
+func BackupArgs(hostTag, tag string) []string {
+	return []string{noCache, "backup", "/data", "--host", hostTag, "--tag", tag}
+}
+
+// ForgetArgs returns argv for pruning snapshots scoped to a tag.
+func ForgetArgs(tag string, keepDays int) []string {
+	return []string{
+		noCache,
+		"forget",
+		"--tag", tag,
+		"--keep-daily", strconv.Itoa(keepDays),
+		"--prune",
+	}
+}

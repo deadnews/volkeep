@@ -1,0 +1,28 @@
+version: 2
+
+builds:
+  - main: ./cmd/volkeep/
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s
+
+release:
+  prerelease: auto
+  footer: |
+    See [the CHANGELOG]({{ .GitURL }}/blob/main/CHANGELOG.md) for more details.
+
+changelog:
+  sort: asc
+  use: git
+  filters:
+    exclude:
+      - ^chore
+      - ^test
+      - ^(ci|build|chore)\(deps.*\)

@@ -1,0 +1,73 @@
+name: Main
+
+on:
+  push:
+    branches: [main]
+    tags: [v*.*.*]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  prek:
+    name: Prek
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run prek
+        uses: j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d # v2.0.4
+
+  test:
+    name: Test
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: make test
+
+      - name: Upload coverage
+        uses: deadnews/coverage-badge-action@bc4aaf332f25c52d1e8dd21ef9ed0b2337ad39af # v1.0.0
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        with:
+          file: coverage.txt
+          type: go
+
+  github-deploy:
+    name: Release to GitHub
+    if: github.ref_type == 'tag'
+    needs: [prek, test]
+    environment: github-releases
+    permissions:
+      contents: write
+    env:
+      PRERELEASE: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          args: release --clean --draft=${{ env.PRERELEASE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

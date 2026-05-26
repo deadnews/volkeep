@@ -1,0 +1,49 @@
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: 515f543f5718ebfd6ce22e16708bb32c68ff96e1 # frozen: v3.8.3
+    hooks:
+      - id: prettier
+
+  - repo: https://github.com/crate-ci/typos
+    rev: f8a58b6b53f2279f71eb605f03a4ae4d10608f45 # frozen: v1.47.0
+    hooks:
+      - id: typos
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: f805888065fdb6162e1f800e50bb9460cbd223d6 # frozen: 0.37.2
+    hooks:
+      - id: check-github-workflows
+      - id: check-renovate
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca # frozen: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: 9257c6050c0261b8c57e712f632dc4a8010109a9 # frozen: v1.25.2
+    hooks:
+      - id: zizmor
+        args: [--fix=safe]
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: c0d3ddc9cf3faa61a4e378e879ece580256d76e5 # frozen: v2.12.2
+    hooks:
+      - id: golangci-lint-full
+
+  - repo: https://github.com/aleksac/hadolint-py
+    rev: 458cb25edf664682e3e856a53a2f9af33e068297 # frozen: v2.14.0
+    hooks:
+      - id: hadolint

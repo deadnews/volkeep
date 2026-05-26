@@ -1,0 +1,256 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"math/rand/v2"
+	"os"
+	"time"
+
+	"github.com/docker/docker/api/types/mount"
+
+	"github.com/deadnews/volkeep/internal/dockerx"
+	"github.com/deadnews/volkeep/internal/label"
+	"github.com/deadnews/volkeep/internal/restic"
+)
+
+// Daemon orchestrates one host's backup runs.
+type Daemon struct {
+	cfg    *Config
+	docker *dockerx.Client
+	env    []string // precomputed restic env passed to every worker
+	fire   chan struct{}
+}
+
+// NewDaemon constructs a Daemon.
+func NewDaemon(cfg *Config, dx *dockerx.Client) *Daemon {
+	env := restic.Env{
+		Repository:   cfg.ResticRepo,
+		Password:     cfg.ResticPassword,
+		AwsAccessKey: cfg.AwsAccessKey,
+		AwsSecretKey: cfg.AwsSecretKey,
+	}.AsSlice()
+	env = append(env, restic.RcloneEnv(os.Environ())...)
+
+	return &Daemon{
+		cfg:    cfg,
+		docker: dx,
+		env:    env,
+		fire:   make(chan struct{}, 1),
+	}
+}
+
+// Trigger requests an out-of-schedule pass; non-blocking, coalesces.
+func (d *Daemon) Trigger() {
+	select {
+	case d.fire <- struct{}{}:
+	default:
+	}
+}
+
+// Run blocks until ctx is cancelled, firing one pass per schedule tick or Trigger.
+func (d *Daemon) Run(ctx context.Context) error {
+	if err := d.docker.Pull(ctx, d.cfg.ResticImage); err != nil {
+		return fmt.Errorf("pull restic image: %w", err)
+	}
+	if err := d.initRepo(ctx); err != nil {
+		return err
+	}
+	for {
+		next := d.cfg.NextFire(time.Now())
+		slog.Info("Next backup scheduled", "at", next.Format(time.RFC3339))
+		t := time.NewTimer(time.Until(next))
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil
+		case <-t.C:
+			if !d.applyJitter(ctx) {
+				return nil
+			}
+			d.runOnce(ctx)
+		case <-d.fire:
+			t.Stop()
+			slog.Info("Manual trigger")
+			d.runOnce(ctx)
+		}
+	}
+}
+
+// applyJitter sleeps [0, Jitter) before the pass; returns false on ctx cancel.
+func (d *Daemon) applyJitter(ctx context.Context) bool {
+	if d.cfg.Jitter <= 0 {
+		return true
+	}
+	delay := time.Duration(rand.Int64N(int64(d.cfg.Jitter))) //nolint:gosec // jitter is non-security
+	slog.Info("Jitter delay", "for", delay)
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(delay):
+		return true
+	}
+}
+
+func (d *Daemon) runOnce(ctx context.Context) {
+	raw, err := d.docker.ListLabeled(ctx, label.Prefix+"enable")
+	if err != nil {
+		slog.Error("Discovery failed", "error", err)
+		return
+	}
+	targets := discover(raw, d.cfg.RetentionDays)
+	slog.Info("Backup pass starting", "targets", len(targets))
+
+	for _, g := range groupByStop(targets) {
+		if ctx.Err() != nil {
+			return
+		}
+		d.runGroup(ctx, g)
+	}
+
+	if d.cfg.Check && ctx.Err() == nil {
+		d.check(ctx)
+	}
+	slog.Info("Backup pass finished")
+}
+
+// check verifies repo integrity.
+func (d *Daemon) check(ctx context.Context) {
+	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Image:  d.cfg.ResticImage,
+		Args:   restic.CheckArgs(),
+		Env:    d.env,
+		Mounts: d.repoMount(),
+	})
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Repository check failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	slog.Info("Repository check passed")
+}
+
+func (d *Daemon) repoMount() []mount.Mount {
+	if d.cfg.RepoVolume == "" {
+		return nil
+	}
+	return []mount.Mount{{Type: mount.TypeVolume, Source: d.cfg.RepoVolume, Target: workerRepoPath}}
+}
+
+// initRepo initializes the repo when restic reports it missing.
+func (d *Daemon) initRepo(ctx context.Context) error {
+	probe, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Image:  d.cfg.ResticImage,
+		Args:   restic.CatConfigArgs(),
+		Env:    d.env,
+		Mounts: d.repoMount(),
+	})
+	if err != nil {
+		return fmt.Errorf("probe repo: %w", err)
+	}
+	switch probe.ExitCode {
+	case 0:
+		slog.Info("Restic repository present")
+		return nil
+	case restic.ExitRepoMissing:
+	default:
+		return fmt.Errorf("probe repo failed (exit %d): %s", probe.ExitCode, probe.Logs)
+	}
+
+	slog.Info("Initializing restic repository")
+	init, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Image:  d.cfg.ResticImage,
+		Args:   restic.InitArgs(),
+		Env:    d.env,
+		Mounts: d.repoMount(),
+	})
+	if err != nil {
+		return fmt.Errorf("init repo: %w", err)
+	}
+	if init.ExitCode != 0 {
+		return fmt.Errorf("restic init failed (exit %d): %s", init.ExitCode, init.Logs)
+	}
+	return nil
+}
+
+// runGroup runs one stop/restart cycle per batch;
+// forget runs after restart so --prune doesn't extend downtime.
+func (d *Daemon) runGroup(ctx context.Context, group []Target) {
+	if len(group) == 0 {
+		return
+	}
+	head := group[0]
+	// Pre-stopped containers must stay stopped after the pass.
+	shouldStop := head.Stop && head.Container.Running
+	if shouldStop {
+		slog.Info("Stopping container", "container", head.Container.Name)
+		if err := d.docker.Stop(ctx, head.Container.ID); err != nil {
+			slog.Error("Stop failed; skipping group", "container", head.Container.Name, "error", err)
+			return
+		}
+	}
+
+	succeeded := make([]*Target, 0, len(group))
+	for i := range group {
+		if d.backupOne(ctx, &group[i]) {
+			succeeded = append(succeeded, &group[i])
+		}
+	}
+
+	if shouldStop {
+		// Restart even on shutdown, or a SIGTERM mid-pass strands the container.
+		startCtx := context.WithoutCancel(ctx)
+		if err := d.docker.Start(startCtx, head.Container.ID); err != nil {
+			slog.Error("Restart failed", "container", head.Container.Name, "error", err)
+		}
+	}
+
+	for _, t := range succeeded {
+		d.forget(ctx, t)
+	}
+}
+
+func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {
+	start := time.Now()
+	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Image: d.cfg.ResticImage,
+		Args:  restic.BackupArgs(d.cfg.HostTag, t.Volume.Name),
+		Env:   d.env,
+		Mounts: append(d.repoMount(), mount.Mount{
+			Type:     mount.TypeVolume,
+			Source:   t.Volume.Name,
+			Target:   "/data",
+			ReadOnly: true,
+		}),
+	})
+	dur := time.Since(start)
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Backup failed",
+			"volume", t.Volume.Name,
+			"duration_ms", dur.Milliseconds(),
+			"exit", res.ExitCode, "error", err, "logs", res.Logs,
+		)
+		return false
+	}
+	slog.Info("Backup finished",
+		"volume", t.Volume.Name,
+		"duration_ms", dur.Milliseconds(),
+	)
+	return true
+}
+
+func (d *Daemon) forget(ctx context.Context, t *Target) {
+	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Image:  d.cfg.ResticImage,
+		Args:   restic.ForgetArgs(t.Volume.Name, t.RetentionDays),
+		Env:    d.env,
+		Mounts: d.repoMount(),
+	})
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Forget failed",
+			"volume", t.Volume.Name, "exit", res.ExitCode, "error", err, "logs", res.Logs,
+		)
+		return
+	}
+	slog.Info("Forget finished", "volume", t.Volume.Name)
+}

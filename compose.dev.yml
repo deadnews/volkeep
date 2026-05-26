@@ -1,0 +1,79 @@
+name: volkeep
+
+services:
+  volkeep:
+    build: .
+    container_name: volkeep
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    depends_on:
+      dsproxy:
+        condition: service_healthy
+    networks:
+      - dsproxy
+    healthcheck:
+      test: [CMD, /bin/pidcheck, --pid, "1"]
+      interval: 1m
+      retries: 3
+      timeout: 10s
+      start_period: 10s
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - VOLKEEP_SCHEDULE=03:00
+      - VOLKEEP_JITTER=30m
+      - VOLKEEP_HOST=dev
+      - VOLKEEP_REPO_VOLUME=volkeep_backups
+      - DOCKER_HOST=tcp://dsproxy:2375
+      - RESTIC_PASSWORD=sample
+
+  sample:
+    image: busybox:musl
+    container_name: volkeep-sample
+    restart: unless-stopped
+    command: sh -c "date > /data/log; trap exit TERM; sleep infinity & wait"
+    volumes:
+      - data:/data:rw
+    labels:
+      volkeep.enable: true
+      volkeep.stop: true
+
+  dsproxy:
+    image: wollomatic/socket-proxy:1
+    container_name: volkeep-dsproxy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    user: 0:0
+    networks:
+      - dsproxy
+    healthcheck:
+      test: [CMD, /healthcheck]
+      interval: 1m
+      retries: 3
+      timeout: 10s
+      start_period: 1m
+    volumes:
+      - ${XDG_RUNTIME_DIR:-/var/run}/docker.sock:/var/run/docker.sock:ro
+    environment:
+      SP_ALLOW_GET: /v1\..{1,2}/(version|_ping|containers/json|containers/[^/]+/logs)
+      SP_ALLOW_HEAD: /_ping
+      SP_ALLOW_POST: /v1\..{1,2}/(containers/create|containers/[^/]+/(start|stop|wait)|images/create)
+      SP_ALLOW_DELETE: /v1\..{1,2}/containers/[^/]+
+      SP_ALLOWFROM: volkeep
+      SP_ALLOWHEALTHCHECK: true
+      SP_LISTENIP: 0.0.0.0
+      SP_LOGLEVEL: INFO
+
+networks:
+  dsproxy:
+
+volumes:
+  backups:
+  data:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
