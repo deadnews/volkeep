@@ -67,7 +67,7 @@ For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 `rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
 `RCLONE_CONFIG_*`.
 
-Trigger a pass on demand:
+### Trigger a pass on demand
 
 ```sh
 docker compose kill -s SIGUSR1 volkeep
@@ -106,14 +106,22 @@ volumes:
 Remote:
 
 ```yml
-environment:
-  VOLKEEP_SCHEDULE: 03:00
-  VOLKEEP_JITTER: 30m
-  VOLKEEP_HOST: ${HOSTNAME:-web-1}
-  RESTIC_REPOSITORY: s3:s3.host.com/bucket/${HOSTNAME:-web-1}
-  RESTIC_PASSWORD: ${RESTIC_PASSWORD}
-  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+name: volkeep
+
+services:
+  volkeep:
+    image: ghcr.io/deadnews/volkeep
+    environment:
+      VOLKEEP_SCHEDULE: 03:00
+      VOLKEEP_JITTER: 30m
+      VOLKEEP_HOST: ${HOSTNAME:-web-1}
+      RESTIC_REPOSITORY: s3:s3.host.com/bucket/${HOSTNAME:-web-1}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+volumes:
+  backups:
 ```
 
 ## Restore
