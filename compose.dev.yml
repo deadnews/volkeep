@@ -24,8 +24,8 @@ services:
     environment:
       - VOLKEEP_SCHEDULE=03:00
       - VOLKEEP_JITTER=30m
-      - VOLKEEP_HOST=dev
       - VOLKEEP_REPO_VOLUME=volkeep_backups
+      - VOLKEEP_HOST=dev
       - DOCKER_HOST=tcp://dsproxy:2375
       - RESTIC_PASSWORD=sample
 

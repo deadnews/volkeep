@@ -5,7 +5,6 @@ package dockerx
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 // Client wraps the Docker SDK client.
@@ -175,7 +175,7 @@ func (c *Client) collectLogs(ctx context.Context, id string) (string, error) {
 	defer func() { _ = r.Close() }()
 
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil && !errors.Is(err, io.EOF) {
+	if _, err := stdcopy.StdCopy(&buf, &buf, r); err != nil {
 		return buf.String(), fmt.Errorf("read logs %s: %w", id, err)
 	}
 	return buf.String(), nil

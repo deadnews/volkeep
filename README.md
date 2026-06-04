@@ -67,10 +67,15 @@ For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 `rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
 `RCLONE_CONFIG_*`.
 
-### Trigger a pass on demand
+`RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
+existing snapshots. Use `restic key add` instead.
+
+## Manual trigger
+
+Run a backup pass on demand:
 
 ```sh
-docker compose kill -s SIGUSR1 volkeep
+docker kill -s SIGUSR1 volkeep
 ```
 
 ## Multi-host
@@ -119,9 +124,6 @@ services:
       RESTIC_PASSWORD: ${RESTIC_PASSWORD}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-
-volumes:
-  backups:
 ```
 
 ## Restore
