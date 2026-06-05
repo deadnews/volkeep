@@ -1,9 +1,10 @@
 # Changelog
 
-## [0.0.1-alpha.1](https://github.com/deadnews/volkeep/commits/v0.0.1-alpha.1) - 2026-06-04
+## [0.0.1-alpha.2](https://github.com/deadnews/volkeep/commits/v0.0.1-alpha.2) - 2026-06-05
 
 ### Features
 
+- select local repo via `RESTIC_REPOSITORY=volume:` scheme - ([8ce081f](https://github.com/deadnews/volkeep/commit/8ce081fa81199258057c70c10b5b491aa0c1eec9))
 - postinit - ([18da88d](https://github.com/deadnews/volkeep/commit/18da88d5b1d67500a9ae3199700fb57713193da7))
 - init - ([c527187](https://github.com/deadnews/volkeep/commit/c5271872906691832633864f95fb4806e7e7957e))
 
