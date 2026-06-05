@@ -24,10 +24,10 @@ services:
     environment:
       - VOLKEEP_SCHEDULE=03:00
       - VOLKEEP_JITTER=30m
-      - VOLKEEP_REPO_VOLUME=volkeep_backups
       - VOLKEEP_HOST=dev
-      - DOCKER_HOST=tcp://dsproxy:2375
+      - RESTIC_REPOSITORY=volume:volkeep_backup
       - RESTIC_PASSWORD=sample
+      - DOCKER_HOST=tcp://dsproxy:2375
 
   sample:
     image: busybox:musl
@@ -66,13 +66,13 @@ services:
       SP_ALLOWFROM: volkeep
       SP_ALLOWHEALTHCHECK: true
       SP_LISTENIP: 0.0.0.0
-      SP_LOGLEVEL: INFO
+      SP_LOGLEVEL: WARN
 
 networks:
   dsproxy:
 
 volumes:
-  backups:
+  backup:
   data:
     driver_opts:
       type: tmpfs

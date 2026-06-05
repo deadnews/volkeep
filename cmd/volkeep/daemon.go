@@ -25,13 +25,13 @@ type Daemon struct {
 
 // NewDaemon constructs a Daemon.
 func NewDaemon(cfg *Config, dx *dockerx.Client) *Daemon {
+	environ := os.Environ()
 	env := restic.Env{
-		Repository:   cfg.ResticRepo,
-		Password:     cfg.ResticPassword,
-		AwsAccessKey: cfg.AwsAccessKey,
-		AwsSecretKey: cfg.AwsSecretKey,
+		Repository: cfg.ResticRepo,
+		Password:   cfg.ResticPassword,
 	}.AsSlice()
-	env = append(env, restic.RcloneEnv(os.Environ())...)
+	env = append(env, restic.AwsEnv(environ)...)
+	env = append(env, restic.RcloneEnv(environ)...)
 
 	return &Daemon{
 		cfg:    cfg,

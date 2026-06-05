@@ -11,32 +11,28 @@ const ExitRepoMissing = 10
 
 // Env carries credentials forwarded to every worker; workers do not inherit daemon env.
 type Env struct {
-	Repository   string
-	Password     string
-	AwsAccessKey string
-	AwsSecretKey string
+	Repository string
+	Password   string
 }
 
-// AsSlice returns env in KEY=VAL form; unset AWS_* keys are omitted.
+// AsSlice returns env in KEY=VAL form.
 func (e Env) AsSlice() []string {
-	out := []string{
+	return []string{
 		"RESTIC_REPOSITORY=" + e.Repository,
 		"RESTIC_PASSWORD=" + e.Password,
 	}
-	if e.AwsAccessKey != "" {
-		out = append(out, "AWS_ACCESS_KEY_ID="+e.AwsAccessKey)
-	}
-	if e.AwsSecretKey != "" {
-		out = append(out, "AWS_SECRET_ACCESS_KEY="+e.AwsSecretKey)
-	}
-	return out
 }
 
+// AwsEnv returns the AWS_* entries from environ.
+func AwsEnv(environ []string) []string { return prefixEnv(environ, "AWS_") }
+
 // RcloneEnv returns the RCLONE_* entries from environ.
-func RcloneEnv(environ []string) []string {
+func RcloneEnv(environ []string) []string { return prefixEnv(environ, "RCLONE_") }
+
+func prefixEnv(environ []string, prefix string) []string {
 	var out []string
 	for _, kv := range environ {
-		if strings.HasPrefix(kv, "RCLONE_") {
+		if strings.HasPrefix(kv, prefix) {
 			out = append(out, kv)
 		}
 	}

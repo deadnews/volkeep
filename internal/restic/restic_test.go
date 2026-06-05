@@ -14,15 +14,13 @@ func TestEnv_AsSlice(t *testing.T) {
 		"RESTIC_REPOSITORY=s3:h/b",
 		"RESTIC_PASSWORD=pw",
 	}, e.AsSlice())
+}
 
-	e.AwsAccessKey = "id"
-	e.AwsSecretKey = "secret"
-	assert.Equal(t, []string{
-		"RESTIC_REPOSITORY=s3:h/b",
-		"RESTIC_PASSWORD=pw",
-		"AWS_ACCESS_KEY_ID=id",
-		"AWS_SECRET_ACCESS_KEY=secret",
-	}, e.AsSlice())
+func TestAwsEnv(t *testing.T) {
+	t.Parallel()
+	environ := []string{"PATH=/bin", "AWS_ACCESS_KEY_ID=id", "HOME=/root", "AWS_SESSION_TOKEN=tok"}
+	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=id", "AWS_SESSION_TOKEN=tok"}, AwsEnv(environ))
+	assert.Nil(t, AwsEnv([]string{"PATH=/bin"}))
 }
 
 func TestInitArgs(t *testing.T) {

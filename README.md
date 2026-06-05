@@ -45,11 +45,9 @@ Bind mounts are skipped. Snapshots are tagged with the volume name.
 | ------------------------ | --------------- | ---------------------------------------- |
 | `VOLKEEP_SCHEDULE`       | required        | Daily fire time `HH:MM` (daemon TZ)      |
 | `VOLKEEP_HOST`           | required        | Identifier for `restic snapshots --host` |
-| `VOLKEEP_REPO_VOLUME`    | —               | Docker volume holding a local repo       |
-| `RESTIC_REPOSITORY`      | —               | Restic backend URI for a remote repo     |
+| `RESTIC_REPOSITORY`      | required        | Restic URI, or `volume:<name>` (local)   |
 | `RESTIC_PASSWORD`        | required        | Restic repo password                     |
-| `AWS_ACCESS_KEY_ID`      | —               | Forwarded to workers (S3 backends)       |
-| `AWS_SECRET_ACCESS_KEY`  | —               | Forwarded to workers (S3 backends)       |
+| `AWS_*`                  | —               | Forwarded to workers (S3 backends)       |
 | `RCLONE_*`               | —               | Forwarded to workers (rclone backends)   |
 | `VOLKEEP_RETENTION_DAYS` | `5`             | Daily snapshots to keep                  |
 | `VOLKEEP_CHECK`          | `true`          | Verify repo integrity after each pass    |
@@ -57,11 +55,11 @@ Bind mounts are skipped. Snapshots are tagged with the volume name.
 | `VOLKEEP_RESTIC_IMAGE`   | `restic/restic` | Worker image                             |
 | `DOCKER_HOST`            | local socket    | Override to reach a proxied daemon       |
 
-Set exactly one repository:
+`RESTIC_REPOSITORY` selects the repository:
 
-- **Local** (`VOLKEEP_REPO_VOLUME`) — a Docker named volume, backed by a
-  bind mount or any other driver via `driver_opts`.
-- **Remote** (`RESTIC_REPOSITORY`) — a restic backend URI (S3, rclone).
+- **Local** — `volume:<name>` uses a Docker named volume as the repo, backed by
+  a bind mount or any driver via `driver_opts`.
+- **Remote** — any restic backend URI (S3, rclone).
 
 For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 `rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
@@ -70,6 +68,12 @@ For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
 
+## Multi-host
+
+By design, each host runs its own daemon and repository. To share a single S3
+bucket, give each host a distinct prefix (`s3:s3.host.com/bucket/<host>`) and
+set `VOLKEEP_JITTER` to spread concurrent fires.
+
 ## Manual trigger
 
 Run a backup pass on demand:
@@ -77,12 +81,6 @@ Run a backup pass on demand:
 ```sh
 docker kill -s SIGUSR1 volkeep
 ```
-
-## Multi-host
-
-By design, each host runs its own daemon and repository. To share a single S3
-bucket, give each host a distinct prefix (`s3:s3.host.com/bucket/<host>`) and
-set `VOLKEEP_JITTER` to spread concurrent fires.
 
 ## Deploy
 
@@ -101,7 +99,7 @@ services:
     environment:
       VOLKEEP_SCHEDULE: 03:00
       VOLKEEP_HOST: ${HOSTNAME:-web-1}
-      VOLKEEP_REPO_VOLUME: volkeep_backups
+      RESTIC_REPOSITORY: volume:volkeep_backup
       RESTIC_PASSWORD: ${RESTIC_PASSWORD}
 
 volumes:
@@ -136,7 +134,7 @@ Local:
 ```sh
 alias RESTIC='docker run --rm \
   -e RESTIC_PASSWORD \
-  -v volkeep_backups:/repo \
+  -v volkeep_backup:/repo \
   restic/restic -r /repo'
 
 RESTIC snapshots --tag app_data

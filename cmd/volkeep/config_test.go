@@ -11,7 +11,7 @@ import (
 func TestLoadConfig_Defaults(t *testing.T) {
 	t.Setenv("VOLKEEP_SCHEDULE", "03:00")
 	t.Setenv("VOLKEEP_HOST", "host1")
-	t.Setenv("VOLKEEP_REPO_VOLUME", "/var/backups/restic")
+	t.Setenv("RESTIC_REPOSITORY", "volume:backup-vol")
 	t.Setenv("RESTIC_PASSWORD", "x")
 
 	c, err := LoadConfig()
@@ -21,7 +21,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	assert.Equal(t, defaultRetentionDays, c.RetentionDays)
 	assert.True(t, c.Check, "check defaults on")
 	assert.Equal(t, defaultResticImage, c.ResticImage)
-	assert.Equal(t, "/var/backups/restic", c.RepoVolume)
+	assert.Equal(t, "backup-vol", c.RepoVolume)
 	assert.Equal(t, "/repo", c.ResticRepo)
 	assert.Equal(t, "host1", c.HostTag)
 }
@@ -40,7 +40,7 @@ func TestLoadConfig_Remote(t *testing.T) {
 
 func TestLoadConfig_Errors(t *testing.T) {
 	allKeys := []string{
-		"VOLKEEP_SCHEDULE", "VOLKEEP_HOST", "VOLKEEP_REPO_VOLUME",
+		"VOLKEEP_SCHEDULE", "VOLKEEP_HOST",
 		"RESTIC_REPOSITORY", "RESTIC_PASSWORD",
 		"VOLKEEP_RETENTION_DAYS", "VOLKEEP_JITTER", "VOLKEEP_CHECK",
 	}
@@ -50,7 +50,6 @@ func TestLoadConfig_Errors(t *testing.T) {
 		"missing password": {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_REPOSITORY": "s3:h/b"},
 		"missing repo":     {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x"},
 		"bad schedule":     {"VOLKEEP_SCHEDULE": "25:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
-		"both repos set":   {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "VOLKEEP_REPO_VOLUME": "v", "RESTIC_REPOSITORY": "s3:h/b"},
 		"bad retention":    {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_RETENTION_DAYS": "0"},
 		"bad jitter":       {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_JITTER": "nope"},
 		"bad check":        {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_CHECK": "nope"},
@@ -72,7 +71,7 @@ func TestLoadConfig_Errors(t *testing.T) {
 func TestLoadConfig_LocalVolume(t *testing.T) {
 	t.Setenv("VOLKEEP_SCHEDULE", "03:00")
 	t.Setenv("VOLKEEP_HOST", "host1")
-	t.Setenv("VOLKEEP_REPO_VOLUME", "myrepo")
+	t.Setenv("RESTIC_REPOSITORY", "volume:myrepo")
 	t.Setenv("RESTIC_PASSWORD", "x")
 
 	c, err := LoadConfig()
