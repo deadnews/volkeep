@@ -1,9 +1,10 @@
 # Changelog
 
-## [0.0.1-alpha.2](https://github.com/deadnews/volkeep/commits/v0.0.1-alpha.2) - 2026-06-05
+## [0.0.1-alpha.3](https://github.com/deadnews/volkeep/commits/v0.0.1-alpha.3) - 2026-06-06
 
 ### Features
 
+- run restic workers under a fixed name - ([cf31d24](https://github.com/deadnews/volkeep/commit/cf31d24c01b0a7bcd92157960468936d8a3b4a1f))
 - select local repo via `RESTIC_REPOSITORY=volume:` scheme - ([8ce081f](https://github.com/deadnews/volkeep/commit/8ce081fa81199258057c70c10b5b491aa0c1eec9))
 - postinit - ([18da88d](https://github.com/deadnews/volkeep/commit/18da88d5b1d67500a9ae3199700fb57713193da7))
 - init - ([c527187](https://github.com/deadnews/volkeep/commit/c5271872906691832633864f95fb4806e7e7957e))
