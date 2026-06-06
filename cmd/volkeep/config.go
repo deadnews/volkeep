@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -13,6 +14,7 @@ const (
 	defaultResticImage   = "restic/restic"
 	defaultRetentionDays = 5
 	workerRepoPath       = "/repo"
+	workerName           = "volkeep-worker"
 )
 
 // Config holds daemon settings sourced from environment variables.
@@ -27,8 +29,6 @@ type Config struct {
 	RepoVolume     string
 	ResticRepo     string
 	ResticPassword string
-	AwsAccessKey   string
-	AwsSecretKey   string
 }
 
 // LoadConfig reads required and optional env vars.
@@ -79,15 +79,16 @@ func LoadConfig() (*Config, error) {
 		check = b
 	}
 
-	repoVolume := os.Getenv("VOLKEEP_REPO_VOLUME")
+	// `volume:<name>` mounts a Docker volume as a local repo;
+	// anything else is a restic URI passed through.
 	resticRepo := os.Getenv("RESTIC_REPOSITORY")
-	switch {
-	case repoVolume != "" && resticRepo != "":
-		return nil, errors.New("set only one of VOLKEEP_REPO_VOLUME (local) or RESTIC_REPOSITORY (remote)")
-	case repoVolume != "":
+	if resticRepo == "" {
+		return nil, errors.New("RESTIC_REPOSITORY is required (restic URI or volume:<name>)")
+	}
+	var repoVolume string
+	if name, ok := strings.CutPrefix(resticRepo, "volume:"); ok {
+		repoVolume = name
 		resticRepo = workerRepoPath
-	case resticRepo == "":
-		return nil, errors.New("set VOLKEEP_REPO_VOLUME (local) or RESTIC_REPOSITORY (remote)")
 	}
 
 	return &Config{
@@ -101,8 +102,6 @@ func LoadConfig() (*Config, error) {
 		RepoVolume:     repoVolume,
 		ResticRepo:     resticRepo,
 		ResticPassword: password,
-		AwsAccessKey:   os.Getenv("AWS_ACCESS_KEY_ID"),
-		AwsSecretKey:   os.Getenv("AWS_SECRET_ACCESS_KEY"),
 	}, nil
 }
 

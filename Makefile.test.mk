@@ -1,9 +1,9 @@
 .PHONY: test trigger sleep snapshots ls
 
-VOLUME  := volkeep_backups
+VOLUME  := volkeep_backup
 RESTIC  := docker run --rm -e RESTIC_PASSWORD=sample -v $(VOLUME):/repo restic/restic -r /repo
 
-test: trigger sleep snapshots ls
+test: trigger sleep snapshots
 
 trigger:
 	docker kill -s SIGUSR1 volkeep
@@ -13,6 +13,3 @@ sleep:
 
 snapshots:
 	$(RESTIC) snapshots
-
-ls:
-	$(RESTIC) ls latest

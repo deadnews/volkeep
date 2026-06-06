@@ -14,30 +14,13 @@ func TestEnv_AsSlice(t *testing.T) {
 		"RESTIC_REPOSITORY=s3:h/b",
 		"RESTIC_PASSWORD=pw",
 	}, e.AsSlice())
-
-	e.AwsAccessKey = "id"
-	e.AwsSecretKey = "secret"
-	assert.Equal(t, []string{
-		"RESTIC_REPOSITORY=s3:h/b",
-		"RESTIC_PASSWORD=pw",
-		"AWS_ACCESS_KEY_ID=id",
-		"AWS_SECRET_ACCESS_KEY=secret",
-	}, e.AsSlice())
 }
 
-func TestInitArgs(t *testing.T) {
+func TestAwsEnv(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, []string{"--no-cache", "init"}, InitArgs())
-}
-
-func TestCatConfigArgs(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, []string{"--no-cache", "cat", "config"}, CatConfigArgs())
-}
-
-func TestCheckArgs(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, []string{"--no-cache", "check"}, CheckArgs())
+	environ := []string{"PATH=/bin", "AWS_ACCESS_KEY_ID=id", "HOME=/root", "AWS_SESSION_TOKEN=tok"}
+	assert.Equal(t, []string{"AWS_ACCESS_KEY_ID=id", "AWS_SESSION_TOKEN=tok"}, AwsEnv(environ))
+	assert.Nil(t, AwsEnv([]string{"PATH=/bin"}))
 }
 
 func TestRcloneEnv(t *testing.T) {
@@ -47,18 +30,19 @@ func TestRcloneEnv(t *testing.T) {
 	assert.Nil(t, RcloneEnv([]string{"PATH=/bin"}))
 }
 
-func TestBackupArgs(t *testing.T) {
+// TestArgs pins the restic contract: every worker is cacheless, locking ops
+// retry the lock, and forget interpolates keepDays.
+func TestArgs(t *testing.T) {
 	t.Parallel()
+	assert.Equal(t, []string{noCache, "init"}, InitArgs())
+	assert.Equal(t, []string{noCache, "cat", "config"}, CatConfigArgs())
+	assert.Equal(t, []string{noCache, retryLock, "check"}, CheckArgs())
 	assert.Equal(t,
-		[]string{"--no-cache", "backup", "/data", "--host", "h1", "--tag", "rss2tg"},
+		[]string{noCache, retryLock, "backup", "/data", "--host", "h1", "--tag", "rss2tg"},
 		BackupArgs("h1", "rss2tg"),
 	)
-}
-
-func TestForgetArgs(t *testing.T) {
-	t.Parallel()
 	assert.Equal(t,
-		[]string{"--no-cache", "forget", "--tag", "rss2tg", "--keep-daily", "3", "--prune"},
+		[]string{noCache, retryLock, "forget", "--tag", "rss2tg", "--keep-daily", "3", "--prune"},
 		ForgetArgs("rss2tg", 3),
 	)
 }

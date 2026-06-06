@@ -10,10 +10,9 @@ import (
 // TestRun_FailsOnMissingConfig: a missing required env var must error before any Docker call.
 func TestRun_FailsOnMissingConfig(t *testing.T) {
 	for _, k := range []string{
-		"VOLKEEP_SCHEDULE", "RESTIC_PASSWORD",
-		"VOLKEEP_REPO_VOLUME", "RESTIC_REPOSITORY",
+		"VOLKEEP_SCHEDULE", "RESTIC_PASSWORD", "RESTIC_REPOSITORY",
 		"VOLKEEP_RETENTION_DAYS", "VOLKEEP_JITTER", "VOLKEEP_HOST",
-		"VOLKEEP_RESTIC_IMAGE", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+		"VOLKEEP_RESTIC_IMAGE",
 	} {
 		t.Setenv(k, "")
 	}
