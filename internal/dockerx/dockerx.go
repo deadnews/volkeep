@@ -103,6 +103,7 @@ func (c *Client) Start(ctx context.Context, id string) error {
 
 // RunSpec describes an ephemeral worker container.
 type RunSpec struct {
+	Name   string
 	Image  string
 	Args   []string
 	Env    []string
@@ -120,14 +121,18 @@ type RunResult struct {
 func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	cfg := &container.Config{Image: spec.Image, Cmd: spec.Args, Env: spec.Env}
 	hostCfg := &container.HostConfig{Mounts: spec.Mounts}
-	resp, err := c.api.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "")
+	if spec.Name != "" {
+		// A crashed run can strand a same-named container.
+		_ = c.api.ContainerRemove(ctx, spec.Name, container.RemoveOptions{Force: true})
+	}
+	resp, err := c.api.ContainerCreate(ctx, cfg, hostCfg, nil, nil, spec.Name)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("create worker: %w", err)
 	}
 	id := resp.ID
 	defer func() {
 		rmCtx := context.WithoutCancel(ctx)
-		// Graceful stop before force removal.
+		// Graceful stop lets restic release its repo lock before force-removal.
 		_ = c.api.ContainerStop(rmCtx, id, container.StopOptions{Signal: "SIGINT"})
 		_ = c.api.ContainerRemove(rmCtx, id, container.RemoveOptions{Force: true})
 	}()

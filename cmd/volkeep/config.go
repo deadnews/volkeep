@@ -14,6 +14,7 @@ const (
 	defaultResticImage   = "restic/restic"
 	defaultRetentionDays = 5
 	workerRepoPath       = "/repo"
+	workerName           = "volkeep-worker"
 )
 
 // Config holds daemon settings sourced from environment variables.

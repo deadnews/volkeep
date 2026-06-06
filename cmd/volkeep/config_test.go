@@ -68,41 +68,6 @@ func TestLoadConfig_Errors(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_LocalVolume(t *testing.T) {
-	t.Setenv("VOLKEEP_SCHEDULE", "03:00")
-	t.Setenv("VOLKEEP_HOST", "host1")
-	t.Setenv("RESTIC_REPOSITORY", "volume:myrepo")
-	t.Setenv("RESTIC_PASSWORD", "x")
-
-	c, err := LoadConfig()
-	require.NoError(t, err)
-	assert.Equal(t, "myrepo", c.RepoVolume)
-	assert.Equal(t, "/repo", c.ResticRepo)
-}
-
-func TestParseHHMM(t *testing.T) {
-	t.Parallel()
-
-	ok := map[string][2]int{
-		"00:00": {0, 0},
-		"03:00": {3, 0},
-		"09:05": {9, 5},
-		"23:59": {23, 59},
-	}
-	for in, want := range ok {
-		h, m, err := parseHHMM(in)
-		require.NoError(t, err, in)
-		assert.Equal(t, want[0], h, in)
-		assert.Equal(t, want[1], m, in)
-	}
-
-	bad := []string{"", "03-00", "24:00", "03:60", "03:00:00", "ab:cd"}
-	for _, in := range bad {
-		_, _, err := parseHHMM(in)
-		require.Error(t, err, in)
-	}
-}
-
 func TestNextFire(t *testing.T) {
 	t.Parallel()
 

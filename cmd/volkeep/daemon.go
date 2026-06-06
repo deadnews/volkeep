@@ -118,6 +118,7 @@ func (d *Daemon) runOnce(ctx context.Context) {
 // check verifies repo integrity.
 func (d *Daemon) check(ctx context.Context) {
 	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Name:   workerName,
 		Image:  d.cfg.ResticImage,
 		Args:   restic.CheckArgs(),
 		Env:    d.env,
@@ -140,6 +141,7 @@ func (d *Daemon) repoMount() []mount.Mount {
 // initRepo initializes the repo when restic reports it missing.
 func (d *Daemon) initRepo(ctx context.Context) error {
 	probe, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Name:   workerName,
 		Image:  d.cfg.ResticImage,
 		Args:   restic.CatConfigArgs(),
 		Env:    d.env,
@@ -159,6 +161,7 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 
 	slog.Info("Initializing restic repository")
 	init, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Name:   workerName,
 		Image:  d.cfg.ResticImage,
 		Args:   restic.InitArgs(),
 		Env:    d.env,
@@ -213,6 +216,7 @@ func (d *Daemon) runGroup(ctx context.Context, group []Target) {
 func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {
 	start := time.Now()
 	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Name:  workerName,
 		Image: d.cfg.ResticImage,
 		Args:  restic.BackupArgs(d.cfg.HostTag, t.Volume.Name),
 		Env:   d.env,
@@ -241,6 +245,7 @@ func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {
 
 func (d *Daemon) forget(ctx context.Context, t *Target) {
 	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Name:   workerName,
 		Image:  d.cfg.ResticImage,
 		Args:   restic.ForgetArgs(t.Volume.Name, t.RetentionDays),
 		Env:    d.env,

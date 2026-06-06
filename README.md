@@ -9,8 +9,8 @@
 
 Containers opt in via labels. At the scheduled time the daemon backs up their
 named volumes through ephemeral `restic` workers, optionally stopping the
-container for the duration, then prunes old snapshots. Backups go to a Docker
-volume or any S3-compatible backend.
+container for the duration, then prunes old snapshots. Backups land in a restic
+repository: a local Docker volume, S3, or an rclone remote.
 
 ## Service labels
 
@@ -59,7 +59,7 @@ Bind mounts are skipped. Snapshots are tagged with the volume name.
 
 - **Local** — `volume:<name>` uses a Docker named volume as the repo, backed by
   a bind mount or any driver via `driver_opts`.
-- **Remote** — any restic backend URI (S3, rclone).
+- **Remote** — an S3 or rclone backend URI.
 
 For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 `rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
@@ -96,6 +96,7 @@ name: volkeep
 services:
   volkeep:
     image: ghcr.io/deadnews/volkeep
+    container_name: volkeep
     environment:
       VOLKEEP_SCHEDULE: 03:00
       VOLKEEP_HOST: ${HOSTNAME:-web-1}
@@ -103,7 +104,7 @@ services:
       RESTIC_PASSWORD: ${RESTIC_PASSWORD}
 
 volumes:
-  backups:
+  backup:
 ```
 
 Remote:
@@ -114,6 +115,7 @@ name: volkeep
 services:
   volkeep:
     image: ghcr.io/deadnews/volkeep
+    container_name: volkeep
     environment:
       VOLKEEP_SCHEDULE: 03:00
       VOLKEEP_JITTER: 30m
@@ -126,7 +128,7 @@ services:
 
 ## Restore
 
-Backups are stored in an ordinary `restic` repository — drive it with any
+Backups are stored in an ordinary `restic` repository. Drive it with any
 `restic` command (`restore`, `mount`). See the [restic docs](https://restic.readthedocs.io/en/stable/050_restore.html).
 
 Local:

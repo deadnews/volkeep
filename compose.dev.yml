@@ -67,6 +67,8 @@ services:
       SP_ALLOWHEALTHCHECK: true
       SP_LISTENIP: 0.0.0.0
       SP_LOGLEVEL: WARN
+      SP_STOPONWATCHDOG: true
+      SP_WATCHDOGINTERVAL: 3600
 
 networks:
   dsproxy:

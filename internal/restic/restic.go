@@ -9,7 +9,8 @@ import (
 // ExitRepoMissing is restic's exit code for a non-existent repository.
 const ExitRepoMissing = 10
 
-// Env carries credentials forwarded to every worker; workers do not inherit daemon env.
+// Env carries credentials forwarded to every worker;
+// workers do not inherit daemon env.
 type Env struct {
 	Repository string
 	Password   string
@@ -42,6 +43,9 @@ func prefixEnv(environ []string, prefix string) []string {
 // Workers are ephemeral, so the restic cache cannot be reused between runs.
 const noCache = "--no-cache"
 
+// Wait out a prior worker's lock.
+const retryLock = "--retry-lock=7s"
+
 // InitArgs returns argv for `restic init`.
 func InitArgs() []string { return []string{noCache, "init"} }
 
@@ -49,17 +53,24 @@ func InitArgs() []string { return []string{noCache, "init"} }
 func CatConfigArgs() []string { return []string{noCache, "cat", "config"} }
 
 // CheckArgs returns argv for a structural integrity check.
-func CheckArgs() []string { return []string{noCache, "check"} }
+func CheckArgs() []string { return []string{noCache, retryLock, "check"} }
 
-// BackupArgs returns argv for backing up /data tagged for retention scoping.
+// BackupArgs returns argv for backing up /data.
 func BackupArgs(hostTag, tag string) []string {
-	return []string{noCache, "backup", "/data", "--host", hostTag, "--tag", tag}
+	return []string{
+		noCache,
+		retryLock,
+		"backup", "/data",
+		"--host", hostTag,
+		"--tag", tag,
+	}
 }
 
 // ForgetArgs returns argv for pruning snapshots scoped to a tag.
 func ForgetArgs(tag string, keepDays int) []string {
 	return []string{
 		noCache,
+		retryLock,
 		"forget",
 		"--tag", tag,
 		"--keep-daily", strconv.Itoa(keepDays),
