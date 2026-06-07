@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.2](https://github.com/deadnews/volkeep/compare/v0.0.1...v0.0.2) - 2026-06-07
+
+### Bug fixes
+
+- skip docker anonymous volumes - ([0d7b457](https://github.com/deadnews/volkeep/commit/0d7b4576db7f6ecd608b7cf630251beab4b3693b))
+
 ## [0.0.1](https://github.com/deadnews/volkeep/commits/v0.0.1) - 2026-06-06
 
 ### Features
