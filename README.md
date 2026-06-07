@@ -37,7 +37,8 @@ volumes:
   data:
 ```
 
-Bind mounts are skipped. Snapshots are tagged with the volume name.
+Bind mounts and anonymous volumes are skipped.
+Snapshots are tagged with the volume name.
 
 ## Daemon configuration
 

@@ -37,3 +37,18 @@ func TestRunDemuxesLogs(t *testing.T) {
 	assert.Contains(t, res.Logs, "err")
 	assert.NotContains(t, res.Logs, "\x00")
 }
+
+func TestIsAnonVolume(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]bool{
+		"d4b0b5d445607e48a14874a07d6e10101978eaf80dd666dbd9ea0378e280237d": true,
+		"vaultwarden_postgres": false,
+		"":                     false,
+		"d4b0b5d445607e48a14874a07d6e10101978eaf80dd666dbd9ea0378e280237D": false, // uppercase hex
+		"g4b0b5d445607e48a14874a07d6e10101978eaf80dd666dbd9ea0378e280237z": false, // non-hex
+	}
+	for name, want := range cases {
+		assert.Equal(t, want, isAnonVolume(name), name)
+	}
+}

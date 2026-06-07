@@ -70,7 +70,7 @@ func (c *Client) ListLabeled(ctx context.Context, labelKey string) ([]Container,
 		vols := make([]Volume, 0, len(r.Mounts))
 		for j := range r.Mounts {
 			m := &r.Mounts[j]
-			if m.Type == mount.TypeVolume && m.Name != "" {
+			if m.Type == mount.TypeVolume && m.Name != "" && !isAnonVolume(m.Name) {
 				vols = append(vols, Volume{Name: m.Name, Destination: m.Destination})
 			}
 		}
@@ -83,6 +83,19 @@ func (c *Client) ListLabeled(ctx context.Context, labelKey string) ([]Container,
 		})
 	}
 	return out, nil
+}
+
+// isAnonVolume reports whether name is a Docker anonymous volume (64-char hex).
+func isAnonVolume(name string) bool {
+	if len(name) != 64 {
+		return false
+	}
+	for _, r := range name {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // Stop stops a running container by ID.

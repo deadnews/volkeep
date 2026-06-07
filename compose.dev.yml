@@ -22,12 +22,12 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
-      - VOLKEEP_SCHEDULE=03:00
-      - VOLKEEP_JITTER=30m
-      - VOLKEEP_HOST=dev
-      - RESTIC_REPOSITORY=volume:volkeep_backup
-      - RESTIC_PASSWORD=sample
-      - DOCKER_HOST=tcp://dsproxy:2375
+      VOLKEEP_SCHEDULE: 03:00
+      VOLKEEP_JITTER: 30m
+      VOLKEEP_HOST: dev
+      RESTIC_REPOSITORY: volume:volkeep_backup
+      RESTIC_PASSWORD: sample
+      DOCKER_HOST: tcp://dsproxy:2375
 
   sample:
     image: busybox:musl
