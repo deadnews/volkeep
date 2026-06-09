@@ -6,14 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEnv_AsSlice(t *testing.T) {
+func TestBaseEnv(t *testing.T) {
 	t.Parallel()
 
-	e := Env{Repository: "s3:h/b", Password: "pw"}
 	assert.Equal(t, []string{
 		"RESTIC_REPOSITORY=s3:h/b",
 		"RESTIC_PASSWORD=pw",
-	}, e.AsSlice())
+	}, BaseEnv("s3:h/b", "pw"))
 }
 
 func TestAwsEnv(t *testing.T) {
@@ -42,7 +41,8 @@ func TestArgs(t *testing.T) {
 		BackupArgs("h1", "rss2tg"),
 	)
 	assert.Equal(t,
-		[]string{noCache, retryLock, "forget", "--tag", "rss2tg", "--keep-daily", "3", "--prune"},
+		[]string{noCache, retryLock, "forget", "--tag", "rss2tg", "--keep-daily", "3"},
 		ForgetArgs("rss2tg", 3),
 	)
+	assert.Equal(t, []string{noCache, retryLock, "prune"}, PruneArgs())
 }

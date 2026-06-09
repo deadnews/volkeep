@@ -140,7 +140,7 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	}
 	resp, err := c.api.ContainerCreate(ctx, cfg, hostCfg, nil, nil, spec.Name)
 	if err != nil {
-		return RunResult{}, fmt.Errorf("create worker: %w", err)
+		return RunResult{ExitCode: -1}, fmt.Errorf("create worker: %w", err)
 	}
 	id := resp.ID
 	defer func() {
@@ -151,23 +151,29 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	}()
 
 	if err := c.api.ContainerStart(ctx, id, container.StartOptions{}); err != nil {
-		return RunResult{}, fmt.Errorf("start worker: %w", err)
+		return RunResult{ExitCode: -1}, fmt.Errorf("start worker: %w", err)
 	}
 
 	logs, err := c.collectLogs(ctx, id)
 	if err != nil {
-		return RunResult{}, err
+		return RunResult{ExitCode: -1, Logs: logs}, err
 	}
 
 	statusCh, errCh := c.api.ContainerWait(ctx, id, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
-		return RunResult{Logs: logs}, fmt.Errorf("wait worker: %w", err)
+		return RunResult{ExitCode: -1, Logs: logs}, fmt.Errorf("wait worker: %w", err)
 	case s := <-statusCh:
 		return RunResult{ExitCode: int(s.StatusCode), Logs: logs}, nil
 	case <-ctx.Done():
-		return RunResult{Logs: logs}, fmt.Errorf("wait worker: %w", ctx.Err())
+		return RunResult{ExitCode: -1, Logs: logs}, fmt.Errorf("wait worker: %w", ctx.Err())
 	}
+}
+
+// HasImage reports whether the image is present locally.
+func (c *Client) HasImage(ctx context.Context, ref string) bool {
+	_, err := c.api.ImageInspect(ctx, ref)
+	return err == nil
 }
 
 // Pull fetches an image, blocking until the transfer completes.
