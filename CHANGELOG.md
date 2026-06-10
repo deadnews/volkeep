@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.3](https://github.com/deadnews/volkeep/compare/v0.0.2...v0.0.3) - 2026-06-10
+
+### Bug fixes
+
+- prune once per pass, not per volume ([#4](https://github.com/deadnews/volkeep/issues/4)) - ([09516d6](https://github.com/deadnews/volkeep/commit/09516d6a33790697b90a8f99fd15592d346accc3))
+
 ## [0.0.2](https://github.com/deadnews/volkeep/compare/v0.0.1...v0.0.2) - 2026-06-07
 
 ### Bug fixes
