@@ -59,7 +59,7 @@ services:
     volumes:
       - ${XDG_RUNTIME_DIR:-/var/run}/docker.sock:/var/run/docker.sock:ro
     environment:
-      SP_ALLOW_GET: /v1\..{1,2}/(version|_ping|containers/json|containers/[^/]+/logs)
+      SP_ALLOW_GET: /v1\..{1,2}/(version|_ping|containers/json|containers/[^/]+/logs|images/.+/json)
       SP_ALLOW_HEAD: /_ping
       SP_ALLOW_POST: /v1\..{1,2}/(containers/create|containers/[^/]+/(start|stop|wait)|images/create)
       SP_ALLOW_DELETE: /v1\..{1,2}/containers/[^/]+

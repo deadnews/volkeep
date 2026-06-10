@@ -9,18 +9,12 @@ import (
 // ExitRepoMissing is restic's exit code for a non-existent repository.
 const ExitRepoMissing = 10
 
-// Env carries credentials forwarded to every worker;
+// BaseEnv returns the credentials forwarded to every worker;
 // workers do not inherit daemon env.
-type Env struct {
-	Repository string
-	Password   string
-}
-
-// AsSlice returns env in KEY=VAL form.
-func (e Env) AsSlice() []string {
+func BaseEnv(repository, password string) []string {
 	return []string{
-		"RESTIC_REPOSITORY=" + e.Repository,
-		"RESTIC_PASSWORD=" + e.Password,
+		"RESTIC_REPOSITORY=" + repository,
+		"RESTIC_PASSWORD=" + password,
 	}
 }
 
@@ -66,7 +60,7 @@ func BackupArgs(hostTag, tag string) []string {
 	}
 }
 
-// ForgetArgs returns argv for pruning snapshots scoped to a tag.
+// ForgetArgs returns argv for forgetting snapshots scoped to a tag.
 func ForgetArgs(tag string, keepDays int) []string {
 	return []string{
 		noCache,
@@ -74,6 +68,8 @@ func ForgetArgs(tag string, keepDays int) []string {
 		"forget",
 		"--tag", tag,
 		"--keep-daily", strconv.Itoa(keepDays),
-		"--prune",
 	}
 }
+
+// PruneArgs returns argv for removing data unreferenced after forgets.
+func PruneArgs() []string { return []string{noCache, retryLock, "prune"} }

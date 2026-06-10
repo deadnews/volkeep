@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -61,7 +60,7 @@ func snapshots(ctx context.Context, t *testing.T, d *Daemon) string {
 		Image:  d.cfg.ResticImage,
 		Args:   []string{"--no-cache", "snapshots", "--no-lock"},
 		Env:    d.env,
-		Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: d.cfg.RepoVolume, Target: workerRepoPath}},
+		Mounts: d.repoMount(),
 	})
 	require.NoError(t, err)
 	require.Zero(t, res.ExitCode, "snapshots probe failed: %s", res.Logs)

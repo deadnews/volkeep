@@ -94,3 +94,16 @@ func TestNextFire(t *testing.T) {
 		assert.Equal(t, tc.want, c.NextFire(tc.now))
 	}
 }
+
+func TestNextFire_DST(t *testing.T) {
+	t.Parallel()
+
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	require.NoError(t, err)
+
+	// Spring-forward night (2026-03-29, 02:00 CET -> 03:00 CEST):
+	// the fire must stay at 03:00 wall clock, not drift to 04:00.
+	c := &Config{Hour: 3, Minute: 0}
+	now := time.Date(2026, 3, 28, 12, 0, 0, 0, berlin)
+	assert.Equal(t, time.Date(2026, 3, 29, 3, 0, 0, 0, berlin), c.NextFire(now))
+}

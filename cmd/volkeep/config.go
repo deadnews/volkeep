@@ -109,7 +109,7 @@ func LoadConfig() (*Config, error) {
 func (c *Config) NextFire(now time.Time) time.Time {
 	next := time.Date(now.Year(), now.Month(), now.Day(), c.Hour, c.Minute, 0, 0, now.Location())
 	if !next.After(now) {
-		next = next.Add(24 * time.Hour)
+		next = time.Date(now.Year(), now.Month(), now.Day()+1, c.Hour, c.Minute, 0, 0, now.Location())
 	}
 	return next
 }

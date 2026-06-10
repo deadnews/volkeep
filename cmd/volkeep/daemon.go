@@ -26,10 +26,7 @@ type Daemon struct {
 // NewDaemon constructs a Daemon.
 func NewDaemon(cfg *Config, dx *dockerx.Client) *Daemon {
 	environ := os.Environ()
-	env := restic.Env{
-		Repository: cfg.ResticRepo,
-		Password:   cfg.ResticPassword,
-	}.AsSlice()
+	env := restic.BaseEnv(cfg.ResticRepo, cfg.ResticPassword)
 	env = append(env, restic.AwsEnv(environ)...)
 	env = append(env, restic.RcloneEnv(environ)...)
 
@@ -52,7 +49,10 @@ func (d *Daemon) Trigger() {
 // Run blocks until ctx is cancelled, firing one pass per schedule tick or Trigger.
 func (d *Daemon) Run(ctx context.Context) error {
 	if err := d.docker.Pull(ctx, d.cfg.ResticImage); err != nil {
-		return fmt.Errorf("pull restic image: %w", err)
+		if !d.docker.HasImage(ctx, d.cfg.ResticImage) {
+			return fmt.Errorf("pull restic image: %w", err)
+		}
+		slog.Warn("Pull failed; using local image", "image", d.cfg.ResticImage, "error", err)
 	}
 	if err := d.initRepo(ctx); err != nil {
 		return err
@@ -102,13 +102,17 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	targets := discover(raw, d.cfg.RetentionDays)
 	slog.Info("Backup pass starting", "targets", len(targets))
 
+	succeeded := 0
 	for _, g := range groupByStop(targets) {
 		if ctx.Err() != nil {
 			return
 		}
-		d.runGroup(ctx, g)
+		succeeded += d.runGroup(ctx, g)
 	}
 
+	if succeeded > 0 && ctx.Err() == nil {
+		d.prune(ctx)
+	}
 	if d.cfg.Check && ctx.Err() == nil {
 		d.check(ctx)
 	}
@@ -160,7 +164,7 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	}
 
 	slog.Info("Initializing restic repository")
-	init, err := d.docker.Run(ctx, &dockerx.RunSpec{
+	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
 		Name:   workerName,
 		Image:  d.cfg.ResticImage,
 		Args:   restic.InitArgs(),
@@ -170,17 +174,17 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("init repo: %w", err)
 	}
-	if init.ExitCode != 0 {
-		return fmt.Errorf("restic init failed (exit %d): %s", init.ExitCode, init.Logs)
+	if res.ExitCode != 0 {
+		return fmt.Errorf("restic init failed (exit %d): %s", res.ExitCode, res.Logs)
 	}
 	return nil
 }
 
-// runGroup runs one stop/restart cycle per batch;
-// forget runs after restart so --prune doesn't extend downtime.
-func (d *Daemon) runGroup(ctx context.Context, group []Target) {
+// runGroup stops/restarts once per batch; returns successful backup count.
+// forget runs post-restart to minimize downtime.
+func (d *Daemon) runGroup(ctx context.Context, group []Target) int {
 	if len(group) == 0 {
-		return
+		return 0
 	}
 	head := group[0]
 	// Pre-stopped containers must stay stopped after the pass.
@@ -189,7 +193,7 @@ func (d *Daemon) runGroup(ctx context.Context, group []Target) {
 		slog.Info("Stopping container", "container", head.Container.Name)
 		if err := d.docker.Stop(ctx, head.Container.ID); err != nil {
 			slog.Error("Stop failed; skipping group", "container", head.Container.Name, "error", err)
-			return
+			return 0
 		}
 	}
 
@@ -211,6 +215,7 @@ func (d *Daemon) runGroup(ctx context.Context, group []Target) {
 	for _, t := range succeeded {
 		d.forget(ctx, t)
 	}
+	return len(succeeded)
 }
 
 func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {
@@ -258,4 +263,20 @@ func (d *Daemon) forget(ctx context.Context, t *Target) {
 		return
 	}
 	slog.Info("Forget finished", "volume", t.Volume.Name)
+}
+
+// prune removes data unreferenced after forgets.
+func (d *Daemon) prune(ctx context.Context) {
+	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+		Name:   workerName,
+		Image:  d.cfg.ResticImage,
+		Args:   restic.PruneArgs(),
+		Env:    d.env,
+		Mounts: d.repoMount(),
+	})
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Prune failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	slog.Info("Prune finished")
 }
