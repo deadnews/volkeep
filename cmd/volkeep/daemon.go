@@ -15,16 +15,26 @@ import (
 	"github.com/deadnews/volkeep/internal/restic"
 )
 
+// dockerClient is the subset of [dockerx.Client] the daemon depends on.
+type dockerClient interface {
+	Pull(ctx context.Context, ref string) error
+	HasImage(ctx context.Context, ref string) bool
+	ListLabeled(ctx context.Context, labelKey string) ([]dockerx.Container, error)
+	Run(ctx context.Context, spec *dockerx.RunSpec) (dockerx.RunResult, error)
+	Stop(ctx context.Context, id string) error
+	Start(ctx context.Context, id string) error
+}
+
 // Daemon orchestrates one host's backup runs.
 type Daemon struct {
 	cfg    *Config
-	docker *dockerx.Client
+	docker dockerClient
 	env    []string // precomputed restic env passed to every worker
 	fire   chan struct{}
 }
 
 // NewDaemon constructs a Daemon.
-func NewDaemon(cfg *Config, dx *dockerx.Client) *Daemon {
+func NewDaemon(cfg *Config, dx dockerClient) *Daemon {
 	environ := os.Environ()
 	env := restic.BaseEnv(cfg.ResticRepo, cfg.ResticPassword)
 	env = append(env, restic.AwsEnv(environ)...)

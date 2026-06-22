@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/deadnews/volkeep/internal/dockerx"
+	"github.com/deadnews/volkeep/internal/restic"
 )
 
 func SkipIfNoTestcontainers(t *testing.T) {
@@ -197,4 +199,125 @@ func TestDaemon_MultiVolume(t *testing.T) {
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_mv_v1")
 	assert.Contains(t, logs, "volkeep_test_mv_v2")
+}
+
+// fakeDocker is an in-memory dockerClient for testing orchestration without Docker.
+type fakeDocker struct {
+	runFunc func(spec *dockerx.RunSpec) (dockerx.RunResult, error)
+	runArgs [][]string
+	stopped []string
+	started []string
+}
+
+func (f *fakeDocker) Pull(context.Context, string) error    { return nil }
+func (f *fakeDocker) HasImage(context.Context, string) bool { return true }
+
+func (f *fakeDocker) ListLabeled(context.Context, string) ([]dockerx.Container, error) {
+	return nil, nil
+}
+
+func (f *fakeDocker) Run(_ context.Context, spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+	f.runArgs = append(f.runArgs, spec.Args)
+	if f.runFunc != nil {
+		return f.runFunc(spec)
+	}
+	return dockerx.RunResult{}, nil
+}
+
+func (f *fakeDocker) Stop(_ context.Context, id string) error {
+	f.stopped = append(f.stopped, id)
+	return nil
+}
+
+func (f *fakeDocker) Start(_ context.Context, id string) error {
+	f.started = append(f.started, id)
+	return nil
+}
+
+func (f *fakeDocker) ran(subcommand string) bool {
+	return slices.ContainsFunc(f.runArgs, func(args []string) bool {
+		return slices.Contains(args, subcommand)
+	})
+}
+
+func newTestDaemon(fake *fakeDocker) *Daemon {
+	return &Daemon{cfg: &Config{RetentionDays: 5}, docker: fake}
+}
+
+func backupExit(code int) func(*dockerx.RunSpec) (dockerx.RunResult, error) {
+	return func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+		if slices.Contains(spec.Args, "backup") {
+			return dockerx.RunResult{ExitCode: code}, nil
+		}
+		return dockerx.RunResult{}, nil
+	}
+}
+
+func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{runFunc: backupExit(restic.ExitBackupPartial)}
+	d := newTestDaemon(fake)
+	group := []Target{{Container: dockerx.Container{ID: "c1", Running: true}, Volume: dockerx.Volume{Name: "v1"}}}
+
+	assert.Equal(t, 1, d.runGroup(context.Background(), group), "partial backup counts as success")
+	assert.True(t, fake.ran("forget"), "retention runs after a partial backup")
+}
+
+func TestRunGroup_FailedBackupSkipsRetention(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{runFunc: backupExit(1)}
+	d := newTestDaemon(fake)
+	group := []Target{{Container: dockerx.Container{ID: "c1", Running: true}, Volume: dockerx.Volume{Name: "v1"}}}
+
+	assert.Equal(t, 0, d.runGroup(context.Background(), group), "failed backup is not counted")
+	assert.False(t, fake.ran("forget"), "no retention for a failed backup")
+}
+
+func TestRunGroup_SkipsForgetOnCancel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	fake := &fakeDocker{runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+		if slices.Contains(spec.Args, "backup") {
+			cancel() // SIGTERM lands after the backup, before forget
+		}
+		return dockerx.RunResult{}, nil
+	}}
+	d := newTestDaemon(fake)
+	group := []Target{{Container: dockerx.Container{ID: "c1", Running: true}, Volume: dockerx.Volume{Name: "v1"}}}
+
+	assert.Equal(t, 1, d.runGroup(ctx, group), "the backup itself succeeded")
+	assert.False(t, fake.ran("forget"), "retention is deferred on shutdown")
+}
+
+func TestRunGroup_RestartsStoppedContainerOnCancel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	fake := &fakeDocker{runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+		if slices.Contains(spec.Args, "backup") {
+			cancel()
+		}
+		return dockerx.RunResult{}, nil
+	}}
+	d := newTestDaemon(fake)
+	group := []Target{{Container: dockerx.Container{ID: "c1", Name: "app", Running: true}, Volume: dockerx.Volume{Name: "v1"}, Stop: true}}
+
+	d.runGroup(ctx, group)
+	assert.Equal(t, []string{"c1"}, fake.stopped)
+	assert.Equal(t, []string{"c1"}, fake.started, "a container the daemon stopped is restarted despite cancel")
+}
+
+func TestRunGroup_PreStoppedStaysDown(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{}
+	d := newTestDaemon(fake)
+	group := []Target{{Container: dockerx.Container{ID: "c1", Running: false}, Volume: dockerx.Volume{Name: "v1"}, Stop: true}}
+
+	d.runGroup(context.Background(), group)
+	assert.Empty(t, fake.stopped, "an already-stopped container is not stopped")
+	assert.Empty(t, fake.started, "an already-stopped container is not restarted")
 }
