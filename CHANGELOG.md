@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.0.4-alpha.0](https://github.com/deadnews/volkeep/compare/v0.0.3...v0.0.4-alpha.0) - 2026-06-22
+## [0.0.4-alpha.1](https://github.com/deadnews/volkeep/compare/v0.0.3...v0.0.4-alpha.1) - 2026-06-22
 
 ### Bug fixes
 
