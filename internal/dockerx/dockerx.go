@@ -138,6 +138,7 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	hostCfg := &container.HostConfig{
 		Mounts:      spec.Mounts,
 		CapDrop:     strslice.StrSlice{"ALL"},
+		CapAdd:      strslice.StrSlice{"DAC_READ_SEARCH"},
 		SecurityOpt: []string{"no-new-privileges"},
 	}
 	if spec.Name != "" {
