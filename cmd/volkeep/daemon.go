@@ -212,8 +212,10 @@ func (d *Daemon) runGroup(ctx context.Context, group []Target) int {
 		}
 	}
 
-	for _, t := range succeeded {
-		d.forget(ctx, t)
+	if ctx.Err() == nil {
+		for _, t := range succeeded {
+			d.forget(ctx, t)
+		}
 	}
 	return len(succeeded)
 }
@@ -233,18 +235,26 @@ func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {
 		}),
 	})
 	dur := time.Since(start)
-	if err != nil || res.ExitCode != 0 {
+	switch {
+	case err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial):
 		slog.Error("Backup failed",
 			"volume", t.Volume.Name,
 			"duration_ms", dur.Milliseconds(),
 			"exit", res.ExitCode, "error", err, "logs", res.Logs,
 		)
 		return false
+	case res.ExitCode == restic.ExitBackupPartial:
+		slog.Warn("Backup completed with unreadable files",
+			"volume", t.Volume.Name,
+			"duration_ms", dur.Milliseconds(),
+			"logs", res.Logs,
+		)
+	default:
+		slog.Info("Backup finished",
+			"volume", t.Volume.Name,
+			"duration_ms", dur.Milliseconds(),
+		)
 	}
-	slog.Info("Backup finished",
-		"volume", t.Volume.Name,
-		"duration_ms", dur.Milliseconds(),
-	)
 	return true
 }
 

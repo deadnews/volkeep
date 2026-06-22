@@ -5,6 +5,7 @@ package dockerx
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
@@ -133,7 +135,11 @@ type RunResult struct {
 // The image must already be present locally; call [Client.Pull] first.
 func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	cfg := &container.Config{Image: spec.Image, Cmd: spec.Args, Env: spec.Env}
-	hostCfg := &container.HostConfig{Mounts: spec.Mounts}
+	hostCfg := &container.HostConfig{
+		Mounts:      spec.Mounts,
+		CapDrop:     strslice.StrSlice{"ALL"},
+		SecurityOpt: []string{"no-new-privileges"},
+	}
 	if spec.Name != "" {
 		// A crashed run can strand a same-named container.
 		_ = c.api.ContainerRemove(ctx, spec.Name, container.RemoveOptions{Force: true})
@@ -154,15 +160,12 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 		return RunResult{ExitCode: -1}, fmt.Errorf("start worker: %w", err)
 	}
 
-	logs, err := c.collectLogs(ctx, id)
-	if err != nil {
-		return RunResult{ExitCode: -1, Logs: logs}, err
-	}
+	logs, logErr := c.collectLogs(ctx, id)
 
 	statusCh, errCh := c.api.ContainerWait(ctx, id, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
-		return RunResult{ExitCode: -1, Logs: logs}, fmt.Errorf("wait worker: %w", err)
+		return RunResult{ExitCode: -1, Logs: logs}, errors.Join(fmt.Errorf("wait worker: %w", err), logErr)
 	case s := <-statusCh:
 		return RunResult{ExitCode: int(s.StatusCode), Logs: logs}, nil
 	case <-ctx.Done():
