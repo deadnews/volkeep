@@ -1,14 +1,10 @@
 # Changelog
 
-## [0.0.4-alpha.1](https://github.com/deadnews/volkeep/compare/v0.0.3...v0.0.4-alpha.1) - 2026-06-22
+## [0.0.4](https://github.com/deadnews/volkeep/compare/v0.0.3...v0.0.4) - 2026-06-23
 
 ### Bug fixes
 
-- _(dockerx)_ drop `capabilities` and `no-new-privileges` on workers - ([586cf8f](https://github.com/deadnews/volkeep/commit/586cf8fa8db236bc7e395c697c026e6c21d359aa))
-
-### Testing
-
-- _(daemon)_ test orchestration via a `dockerClient` - ([efae5ae](https://github.com/deadnews/volkeep/commit/efae5ae27f0b9cf456412d44fc39028c05ac4e91))
+- _(dockerx)_ restrict worker caps to `DAC_READ_SEARCH` ([#5](https://github.com/deadnews/volkeep/issues/5)) - ([4962d59](https://github.com/deadnews/volkeep/commit/4962d59ea21dc981f30fe6de96c14f9869b9bb7d))
 
 ## [0.0.3](https://github.com/deadnews/volkeep/compare/v0.0.2...v0.0.3) - 2026-06-10
 
