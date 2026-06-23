@@ -80,17 +80,16 @@ func groupByStop(targets []Target) [][]Target {
 		stopKeys []string
 		groups   = make(map[string][]Target)
 	)
-	for i := range targets {
-		t := &targets[i]
+	for _, t := range targets {
 		if !t.Stop {
-			out = append(out, []Target{*t})
+			out = append(out, []Target{t})
 			continue
 		}
 		key := t.Container.ID
 		if _, ok := groups[key]; !ok {
 			stopKeys = append(stopKeys, key)
 		}
-		groups[key] = append(groups[key], *t)
+		groups[key] = append(groups[key], t)
 	}
 	for _, k := range stopKeys {
 		out = append(out, groups[k])

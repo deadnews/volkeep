@@ -6,8 +6,12 @@ import (
 	"strings"
 )
 
-// ExitRepoMissing is restic's exit code for a non-existent repository.
-const ExitRepoMissing = 10
+const (
+	// ExitBackupPartial is restic's exit code for a snapshot with unreadable files.
+	ExitBackupPartial = 3
+	// ExitRepoMissing is restic's exit code for a non-existent repository.
+	ExitRepoMissing = 10
+)
 
 // BaseEnv returns the credentials forwarded to every worker;
 // workers do not inherit daemon env.
