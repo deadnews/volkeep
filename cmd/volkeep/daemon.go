@@ -123,6 +123,7 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	}
 
 	if succeeded > 0 && ctx.Err() == nil {
+		d.sweep(ctx, groups)
 		d.prune(ctx)
 	}
 	if d.cfg.Check && ctx.Err() == nil {
@@ -291,6 +292,29 @@ func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
 		return
 	}
 	slog.Info("Forget finished", "volume", volume)
+}
+
+// sweep forgets snapshots older than MaxAgeDays, aging out stale volumes.
+func (d *Daemon) sweep(ctx context.Context, groups []Group) {
+	if d.cfg.MaxAgeDays == 0 {
+		return
+	}
+	// Retention reaching the cutoff would lose snapshots it means to keep.
+	for i := range groups {
+		if g := &groups[i]; g.RetentionDays >= d.cfg.MaxAgeDays {
+			slog.Error("Sweep skipped: retention reaches max age",
+				"container", g.Container.Name,
+				"retention_days", g.RetentionDays, "max_age_days", d.cfg.MaxAgeDays,
+			)
+			return
+		}
+	}
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.SweepArgs(d.cfg.MaxAgeDays)))
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Sweep failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	slog.Info("Sweep finished")
 }
 
 // prune removes data unreferenced after forgets.

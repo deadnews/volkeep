@@ -360,6 +360,39 @@ func TestRunGroup_PreStoppedStaysDown(t *testing.T) {
 	assert.Empty(t, fake.started, "an already-stopped container is not restarted")
 }
 
+func TestSweep_DisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{}
+	d := newTestDaemon(fake)
+
+	d.sweep(context.Background(), []Group{{RetentionDays: 5}})
+	assert.False(t, fake.ran("--keep-within"))
+}
+
+func TestSweep_Runs(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{}
+	d := &Daemon{cfg: &Config{RetentionDays: 5, MaxAgeDays: 30}, docker: fake}
+
+	d.sweep(context.Background(), []Group{{RetentionDays: 5}})
+	assert.True(t, fake.ran("--keep-within"))
+}
+
+func TestSweep_SkipsWhenRetentionReachesMaxAge(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{}
+	d := &Daemon{cfg: &Config{RetentionDays: 5, MaxAgeDays: 30}, docker: fake}
+
+	d.sweep(context.Background(), []Group{
+		{RetentionDays: 5},
+		{RetentionDays: 30, Container: dockerx.Container{Name: "app"}},
+	})
+	assert.False(t, fake.ran("--keep-within"), "a label retention reaching the cutoff blocks the sweep")
+}
+
 func TestRunGroup_ExecRunsOncePerGroup(t *testing.T) {
 	t.Parallel()
 

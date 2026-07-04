@@ -75,5 +75,15 @@ func ForgetArgs(tag string, keepDays int) []string {
 	}
 }
 
+// SweepArgs returns argv for forgetting snapshots older than maxAgeDays.
+func SweepArgs(maxAgeDays int) []string {
+	return []string{
+		noCache,
+		retryLock,
+		"forget",
+		"--keep-within", strconv.Itoa(maxAgeDays) + "d",
+	}
+}
+
 // PruneArgs returns argv for removing data unreferenced after forgets.
 func PruneArgs() []string { return []string{noCache, retryLock, "prune"} }

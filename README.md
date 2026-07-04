@@ -52,6 +52,7 @@ Snapshots are tagged with the volume name.
 | `AWS_*`                  | —               | Forwarded to workers (S3 backends)       |
 | `RCLONE_*`               | —               | Forwarded to workers (rclone backends)   |
 | `VOLKEEP_RETENTION_DAYS` | `5`             | Daily snapshots to keep                  |
+| `VOLKEEP_MAX_AGE_DAYS`   | `0`             | Remove snapshots older than this         |
 | `VOLKEEP_CHECK`          | `true`          | Verify repo integrity after each pass    |
 | `VOLKEEP_JITTER`         | `0`             | Random pre-fire delay (e.g. `30m`)       |
 | `VOLKEEP_RESTIC_IMAGE`   | `restic/restic` | Worker image                             |
@@ -69,6 +70,10 @@ For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
+
+`VOLKEEP_MAX_AGE_DAYS` ages out snapshots of volumes that are no longer backed up,
+whether the service is gone or its volume set changed; `0` keeps them forever.
+The cutoff must exceed retention window.
 
 ## Multi-host
 
@@ -90,6 +95,7 @@ A live database can be dumped instead of stopped: `volkeep.exec-pre`
 runs a command inside the container before its volumes are backed up;
 `volkeep.volumes` must whitelist the volume receiving the dump.
 A non-zero exit skips the backup.
+Wrap it in `/bin/sh -c '...'` for redirection or variable expansion.
 
 ## Deploy
 
@@ -164,13 +170,4 @@ alias RESTIC='docker run --rm \
 
 RESTIC snapshots --host web-1 --tag app_data
 RESTIC restore latest --host web-1 --tag app_data --target /tmp/out
-```
-
-Snapshots of a removed service are kept forever;
-retention only trims volumes that still get backed up.
-Delete one service's snapshots, or sweep everything older than a cutoff:
-
-```sh
-RESTIC forget --tag app_data --unsafe-allow-remove-all
-RESTIC forget --keep-within 30d
 ```

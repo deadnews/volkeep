@@ -19,6 +19,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	assert.Equal(t, 3, c.Hour)
 	assert.Equal(t, 0, c.Minute)
 	assert.Equal(t, defaultRetentionDays, c.RetentionDays)
+	assert.Equal(t, 0, c.MaxAgeDays, "sweep defaults off")
 	assert.True(t, c.Check, "check defaults on")
 	assert.Equal(t, defaultResticImage, c.ResticImage)
 	assert.Equal(t, "backup-vol", c.RepoVolume)
@@ -43,16 +44,19 @@ func TestLoadConfig_Errors(t *testing.T) {
 		"VOLKEEP_SCHEDULE", "VOLKEEP_HOST",
 		"RESTIC_REPOSITORY", "RESTIC_PASSWORD",
 		"VOLKEEP_RETENTION_DAYS", "VOLKEEP_JITTER", "VOLKEEP_CHECK",
+		"VOLKEEP_MAX_AGE_DAYS",
 	}
 	cases := map[string]map[string]string{
-		"missing schedule": {"VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
-		"missing host":     {"VOLKEEP_SCHEDULE": "03:00", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
-		"missing password": {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_REPOSITORY": "s3:h/b"},
-		"missing repo":     {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x"},
-		"bad schedule":     {"VOLKEEP_SCHEDULE": "25:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
-		"bad retention":    {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_RETENTION_DAYS": "0"},
-		"bad jitter":       {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_JITTER": "nope"},
-		"bad check":        {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_CHECK": "nope"},
+		"missing schedule":         {"VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
+		"missing host":             {"VOLKEEP_SCHEDULE": "03:00", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
+		"missing password":         {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_REPOSITORY": "s3:h/b"},
+		"missing repo":             {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x"},
+		"bad schedule":             {"VOLKEEP_SCHEDULE": "25:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b"},
+		"bad retention":            {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_RETENTION_DAYS": "0"},
+		"bad max age":              {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_MAX_AGE_DAYS": "-1"},
+		"max age within retention": {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_MAX_AGE_DAYS": "5"},
+		"bad jitter":               {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_JITTER": "nope"},
+		"bad check":                {"VOLKEEP_SCHEDULE": "03:00", "VOLKEEP_HOST": "h", "RESTIC_PASSWORD": "x", "RESTIC_REPOSITORY": "s3:h/b", "VOLKEEP_CHECK": "nope"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -66,6 +70,18 @@ func TestLoadConfig_Errors(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestLoadConfig_MaxAge(t *testing.T) {
+	t.Setenv("VOLKEEP_SCHEDULE", "03:00")
+	t.Setenv("VOLKEEP_HOST", "host1")
+	t.Setenv("RESTIC_REPOSITORY", "s3:h/b")
+	t.Setenv("RESTIC_PASSWORD", "x")
+	t.Setenv("VOLKEEP_MAX_AGE_DAYS", "30")
+
+	c, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, 30, c.MaxAgeDays)
 }
 
 func TestNextFire(t *testing.T) {

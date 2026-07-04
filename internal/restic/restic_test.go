@@ -44,5 +44,9 @@ func TestArgs(t *testing.T) {
 		[]string{noCache, retryLock, "forget", "--tag", "rss2tg", "--keep-daily", "3"},
 		ForgetArgs("rss2tg", 3),
 	)
+	assert.Equal(t,
+		[]string{noCache, retryLock, "forget", "--keep-within", "30d"},
+		SweepArgs(30),
+	)
 	assert.Equal(t, []string{noCache, retryLock, "prune"}, PruneArgs())
 }
