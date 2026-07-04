@@ -39,7 +39,7 @@ func TestParse_Full(t *testing.T) {
 	s, enabled, err := Parse(map[string]string{
 		"volkeep.enable":         "true",
 		"volkeep.volumes":        "data, cache ,",
-		"volkeep.exec":           "pg_dump -Fc -f /dump/db.dump app",
+		"volkeep.exec-pre":       "pg_dump -Fc -f /dump/db.dump app",
 		"volkeep.stop":           "true",
 		"volkeep.retention-days": "3",
 	})
@@ -57,8 +57,8 @@ func TestParse_ExecRequiresVolumes(t *testing.T) {
 	t.Parallel()
 
 	_, _, err := Parse(map[string]string{
-		"volkeep.enable": "true",
-		"volkeep.exec":   "pg_dump -f /dump/db.dump app",
+		"volkeep.enable":   "true",
+		"volkeep.exec-pre": "pg_dump -f /dump/db.dump app",
 	})
 	require.Error(t, err)
 }
@@ -68,9 +68,9 @@ func TestParse_InvalidExec(t *testing.T) {
 
 	for _, v := range []string{"  ", "sh -c 'unterminated"} {
 		_, _, err := Parse(map[string]string{
-			"volkeep.enable":  "true",
-			"volkeep.volumes": "dump",
-			"volkeep.exec":    v,
+			"volkeep.enable":   "true",
+			"volkeep.volumes":  "dump",
+			"volkeep.exec-pre": v,
 		})
 		require.Error(t, err, "value %q should be rejected", v)
 	}

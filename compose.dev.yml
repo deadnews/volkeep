@@ -53,7 +53,7 @@ services:
       POSTGRES_PASSWORD: sample
     labels:
       volkeep.enable: true
-      volkeep.exec: pg_dump -U sample -Fc -Z0 -f /dump/db.dump sample
+      volkeep.exec-pre: pg_dump -U sample -Fc -Z0 -f /dump/db.dump sample
       volkeep.volumes: volkeep_pgdump
 
   dsproxy:

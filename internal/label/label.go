@@ -35,13 +35,13 @@ func Parse(labels map[string]string) (Spec, bool, error) {
 		}
 	}
 
-	if v := labels[Prefix+"exec"]; v != "" {
+	if v := labels[Prefix+"exec-pre"]; v != "" {
 		argv, err := splitCommand(v)
 		if err != nil {
-			return Spec{}, false, fmt.Errorf("label %sexec: %w", Prefix, err)
+			return Spec{}, false, fmt.Errorf("label %sexec-pre: %w", Prefix, err)
 		}
 		if len(argv) == 0 {
-			return Spec{}, false, fmt.Errorf("label %sexec: empty command", Prefix)
+			return Spec{}, false, fmt.Errorf("label %sexec-pre: empty command", Prefix)
 		}
 		s.Exec = argv
 	}
@@ -64,7 +64,7 @@ func Parse(labels map[string]string) (Spec, bool, error) {
 
 	// Defaulting to all mounts would snapshot the live data the exec exists to avoid.
 	if len(s.Exec) > 0 && len(s.Volumes) == 0 {
-		return Spec{}, false, fmt.Errorf("label %sexec requires %svolumes", Prefix, Prefix)
+		return Spec{}, false, fmt.Errorf("label %sexec-pre requires %svolumes", Prefix, Prefix)
 	}
 
 	return s, true, nil

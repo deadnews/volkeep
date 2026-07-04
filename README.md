@@ -18,7 +18,7 @@ repository: a local Docker volume, S3, or an rclone remote.
 | ------------------------ | ---------------- | --------------------------------------- |
 | `volkeep.enable`         | required         | `true` to opt this container in         |
 | `volkeep.stop`           | `false`          | Stop the container during backup        |
-| `volkeep.exec`           | —                | Pre-backup command run in the container |
+| `volkeep.exec-pre`       | —                | Pre-backup command run in the container |
 | `volkeep.volumes`        | all named mounts | Comma-separated whitelist               |
 | `volkeep.retention-days` | daemon default   | Daily snapshots to keep                 |
 
@@ -86,16 +86,16 @@ docker kill -s SIGUSR1 volkeep
 
 ## Databases
 
-A live database can be dumped instead of stopped: `volkeep.exec` runs a
-command inside the container before its volumes are backed up, and
-`volkeep.volumes` must whitelist the volume receiving the dump. A non-zero
-exit skips the backup.
+A live database can be dumped instead of stopped: `volkeep.exec-pre`
+runs a command inside the container before its volumes are backed up;
+`volkeep.volumes` must whitelist the volume receiving the dump.
+A non-zero exit skips the backup.
 
 ## Deploy
 
 `volkeep` needs access to the Docker API. [`compose.dev.yml`](./compose.dev.yml)
-wires it through a socket-proxy and shows the full stack. The snippets
-below cover only `volkeep`'s own config.
+wires it through a socket-proxy and shows the full stack.
+The snippets below cover only `volkeep`'s own config.
 
 Local:
 
@@ -137,8 +137,9 @@ services:
 
 ## Restore
 
-Backups are stored in an ordinary `restic` repository. Drive it with any
-`restic` command (`restore`, `mount`). See the [restic docs](https://restic.readthedocs.io/en/stable/050_restore.html).
+Backups are stored in an ordinary `restic` repository.
+Drive it with any `restic` command (`restore`, `mount`).
+See the [restic docs](https://restic.readthedocs.io/en/stable/050_restore.html).
 
 Local:
 
@@ -163,4 +164,13 @@ alias RESTIC='docker run --rm \
 
 RESTIC snapshots --host web-1 --tag app_data
 RESTIC restore latest --host web-1 --tag app_data --target /tmp/out
+```
+
+Snapshots of a removed service are kept forever;
+retention only trims volumes that still get backed up.
+Delete one service's snapshots, or sweep everything older than a cutoff:
+
+```sh
+RESTIC forget --tag app_data --unsafe-allow-remove-all
+RESTIC forget --keep-within 30d
 ```

@@ -208,9 +208,9 @@ func TestDaemon_ExecDump(t *testing.T) {
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo secret > /src/db; trap 'exit 0' TERM; sleep 3600 & wait"),
 		testcontainers.WithLabels(map[string]string{
-			"volkeep.enable":  "true",
-			"volkeep.exec":    "sh -c 'cp /src/db /dump/db.dump'",
-			"volkeep.volumes": "volkeep_test_exec_dump",
+			"volkeep.enable":   "true",
+			"volkeep.exec-pre": "sh -c 'cp /src/db /dump/db.dump'",
+			"volkeep.volumes":  "volkeep_test_exec_dump",
 		}),
 		testcontainers.WithMounts(
 			testcontainers.VolumeMount("volkeep_test_exec_src", "/src"),

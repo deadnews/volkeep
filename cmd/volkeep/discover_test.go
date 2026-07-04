@@ -128,9 +128,9 @@ func TestDiscover_Exec(t *testing.T) {
 		{
 			Name: "db",
 			Labels: map[string]string{
-				"volkeep.enable":  "true",
-				"volkeep.exec":    "pg_dump -Fc -f /dump/db.dump app",
-				"volkeep.volumes": "app_dump",
+				"volkeep.enable":   "true",
+				"volkeep.exec-pre": "pg_dump -Fc -f /dump/db.dump app",
+				"volkeep.volumes":  "app_dump",
 			},
 			Volumes: []dockerx.Volume{
 				{Name: "app_data", Destination: "/var/lib/postgresql"},
@@ -152,8 +152,8 @@ func TestDiscover_ExecWithoutVolumes(t *testing.T) {
 		{
 			Name: "db",
 			Labels: map[string]string{
-				"volkeep.enable": "true",
-				"volkeep.exec":   "pg_dump -Fc -f /dump/db.dump app",
+				"volkeep.enable":   "true",
+				"volkeep.exec-pre": "pg_dump -Fc -f /dump/db.dump app",
 			},
 			Volumes: []dockerx.Volume{{Name: "app_data"}},
 		},
