@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/mount"
@@ -110,15 +111,15 @@ func (d *Daemon) runOnce(ctx context.Context) {
 		slog.Error("Discovery failed", "error", err)
 		return
 	}
-	targets := discover(raw, d.cfg.RetentionDays)
-	slog.Info("Backup pass starting", "targets", len(targets))
+	groups := discover(raw, d.cfg.RetentionDays)
+	slog.Info("Backup pass starting", "containers", len(groups))
 
 	succeeded := 0
-	for _, g := range groupByContainer(targets) {
+	for i := range groups {
 		if ctx.Err() != nil {
 			return
 		}
-		succeeded += d.runGroup(ctx, g)
+		succeeded += d.runGroup(ctx, &groups[i])
 	}
 
 	if succeeded > 0 && ctx.Err() == nil {
@@ -130,15 +131,20 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	slog.Info("Backup pass finished")
 }
 
-// check verifies repo integrity.
-func (d *Daemon) check(ctx context.Context) {
-	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
+// workerSpec assembles the RunSpec shared by every restic worker.
+func (d *Daemon) workerSpec(args []string, mounts ...mount.Mount) *dockerx.RunSpec {
+	return &dockerx.RunSpec{
 		Name:   workerName,
 		Image:  d.cfg.ResticImage,
-		Args:   restic.CheckArgs(),
+		Args:   args,
 		Env:    d.env,
-		Mounts: d.repoMount(),
-	})
+		Mounts: append(d.repoMount(), mounts...),
+	}
+}
+
+// check verifies repo integrity.
+func (d *Daemon) check(ctx context.Context) {
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.CheckArgs()))
 	if err != nil || res.ExitCode != 0 {
 		slog.Error("Repository check failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
 		return
@@ -155,13 +161,7 @@ func (d *Daemon) repoMount() []mount.Mount {
 
 // initRepo initializes the repo when restic reports it missing.
 func (d *Daemon) initRepo(ctx context.Context) error {
-	probe, err := d.docker.Run(ctx, &dockerx.RunSpec{
-		Name:   workerName,
-		Image:  d.cfg.ResticImage,
-		Args:   restic.CatConfigArgs(),
-		Env:    d.env,
-		Mounts: d.repoMount(),
-	})
+	probe, err := d.docker.Run(ctx, d.workerSpec(restic.CatConfigArgs()))
 	if err != nil {
 		return fmt.Errorf("probe repo: %w", err)
 	}
@@ -175,13 +175,7 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	}
 
 	slog.Info("Initializing restic repository")
-	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
-		Name:   workerName,
-		Image:  d.cfg.ResticImage,
-		Args:   restic.InitArgs(),
-		Env:    d.env,
-		Mounts: d.repoMount(),
-	})
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.InitArgs()))
 	if err != nil {
 		return fmt.Errorf("init repo: %w", err)
 	}
@@ -191,135 +185,117 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	return nil
 }
 
-// runGroup stops/restarts once per batch; returns successful backup count.
+// runGroup stops/restarts once per group; returns successful backup count.
 // forget runs post-restart to minimize downtime.
-func (d *Daemon) runGroup(ctx context.Context, group []Target) int {
-	if len(group) == 0 {
-		return 0
-	}
-	head := group[0]
-	if len(head.Exec) > 0 && !d.execHook(ctx, &head) {
+func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
+	if len(g.Exec) > 0 && !d.execHook(ctx, g) {
 		return 0
 	}
 	// Pre-stopped containers must stay stopped after the pass.
-	shouldStop := head.Stop && head.Container.Running
+	shouldStop := g.Stop && g.Container.Running
 	if shouldStop {
-		slog.Info("Stopping container", "container", head.Container.Name)
-		if err := d.docker.Stop(ctx, head.Container.ID); err != nil {
-			slog.Error("Stop failed; skipping group", "container", head.Container.Name, "error", err)
+		slog.Info("Stopping container", "container", g.Container.Name)
+		if err := d.docker.Stop(ctx, g.Container.ID); err != nil {
+			slog.Error("Stop failed; skipping group", "container", g.Container.Name, "error", err)
 			return 0
 		}
 	}
 
-	succeeded := make([]*Target, 0, len(group))
-	for i := range group {
-		if d.backupOne(ctx, &group[i]) {
-			succeeded = append(succeeded, &group[i])
+	succeeded := make([]string, 0, len(g.Volumes))
+	for _, v := range g.Volumes {
+		if d.backupOne(ctx, v.Name) {
+			succeeded = append(succeeded, v.Name)
 		}
 	}
 
 	if shouldStop {
 		// Restart even on shutdown, or a SIGTERM mid-pass strands the container.
 		startCtx := context.WithoutCancel(ctx)
-		if err := d.docker.Start(startCtx, head.Container.ID); err != nil {
-			slog.Error("Restart failed", "container", head.Container.Name, "error", err)
+		if err := d.docker.Start(startCtx, g.Container.ID); err != nil {
+			slog.Error("Restart failed", "container", g.Container.Name, "error", err)
 		}
 	}
 
 	if ctx.Err() == nil {
-		for _, t := range succeeded {
-			d.forget(ctx, t)
+		for _, name := range succeeded {
+			d.forget(ctx, name, g.RetentionDays)
 		}
 	}
 	return len(succeeded)
 }
 
 // execHook runs the pre-backup command and reports whether the group can proceed.
-func (d *Daemon) execHook(ctx context.Context, t *Target) bool {
-	if !t.Container.Running {
-		slog.Error("Exec skipped: container not running; skipping group", "container", t.Container.Name)
+func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
+	if !g.Container.Running {
+		slog.Error("Exec skipped: container not running; skipping group", "container", g.Container.Name)
 		return false
 	}
 	start := time.Now()
-	res, err := d.docker.Exec(ctx, t.Container.ID, t.Exec)
+	res, err := d.docker.Exec(ctx, g.Container.ID, g.Exec)
 	if err != nil || res.ExitCode != 0 {
 		slog.Error("Exec failed; skipping group",
-			"container", t.Container.Name,
+			"container", g.Container.Name,
 			"exit", res.ExitCode, "error", err, "logs", res.Logs,
 		)
 		return false
 	}
 	slog.Info("Exec finished",
-		"container", t.Container.Name,
+		"container", g.Container.Name,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 	return true
 }
 
-func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {
+func (d *Daemon) backupOne(ctx context.Context, volume string) bool {
 	start := time.Now()
-	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
-		Name:  workerName,
-		Image: d.cfg.ResticImage,
-		Args:  restic.BackupArgs(d.cfg.HostTag, t.Volume.Name),
-		Env:   d.env,
-		Mounts: append(d.repoMount(), mount.Mount{
+	res, err := d.docker.Run(ctx, d.workerSpec(
+		restic.BackupArgs(d.cfg.HostTag, volume),
+		mount.Mount{
 			Type:     mount.TypeVolume,
-			Source:   t.Volume.Name,
+			Source:   volume,
 			Target:   "/data",
 			ReadOnly: true,
-		}),
-	})
+		},
+	))
 	dur := time.Since(start)
 	switch {
 	case err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial):
 		slog.Error("Backup failed",
-			"volume", t.Volume.Name,
+			"volume", volume,
 			"duration_ms", dur.Milliseconds(),
 			"exit", res.ExitCode, "error", err, "logs", res.Logs,
 		)
 		return false
 	case res.ExitCode == restic.ExitBackupPartial:
 		slog.Warn("Backup completed with unreadable files",
-			"volume", t.Volume.Name,
+			"volume", volume,
 			"duration_ms", dur.Milliseconds(),
 			"logs", res.Logs,
 		)
 	default:
 		slog.Info("Backup finished",
-			"volume", t.Volume.Name,
+			"volume", volume,
 			"duration_ms", dur.Milliseconds(),
+			"summary", strings.TrimSpace(res.Logs),
 		)
 	}
 	return true
 }
 
-func (d *Daemon) forget(ctx context.Context, t *Target) {
-	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
-		Name:   workerName,
-		Image:  d.cfg.ResticImage,
-		Args:   restic.ForgetArgs(t.Volume.Name, t.RetentionDays),
-		Env:    d.env,
-		Mounts: d.repoMount(),
-	})
+func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.ForgetArgs(volume, keepDays)))
 	if err != nil || res.ExitCode != 0 {
 		slog.Error("Forget failed",
-			"volume", t.Volume.Name, "exit", res.ExitCode, "error", err, "logs", res.Logs,
+			"volume", volume, "exit", res.ExitCode, "error", err, "logs", res.Logs,
 		)
 		return
 	}
-	slog.Info("Forget finished", "volume", t.Volume.Name)
+	slog.Info("Forget finished", "volume", volume)
 }
 
 // prune removes data unreferenced after forgets.
 func (d *Daemon) prune(ctx context.Context) {
-	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
-		Name:   workerName,
-		Image:  d.cfg.ResticImage,
-		Args:   restic.PruneArgs(),
-		Env:    d.env,
-		Mounts: d.repoMount(),
-	})
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.PruneArgs()))
 	if err != nil || res.ExitCode != 0 {
 		slog.Error("Prune failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
 		return
