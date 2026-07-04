@@ -39,6 +39,7 @@ func TestParse_Full(t *testing.T) {
 	s, enabled, err := Parse(map[string]string{
 		"volkeep.enable":         "true",
 		"volkeep.volumes":        "data, cache ,",
+		"volkeep.exec":           "pg_dump -Fc -f /dump/db.dump app",
 		"volkeep.stop":           "true",
 		"volkeep.retention-days": "3",
 	})
@@ -46,9 +47,54 @@ func TestParse_Full(t *testing.T) {
 	assert.True(t, enabled)
 	assert.Equal(t, Spec{
 		Volumes:       []string{"data", "cache"},
+		Exec:          []string{"pg_dump", "-Fc", "-f", "/dump/db.dump", "app"},
 		Stop:          true,
 		RetentionDays: 3,
 	}, s)
+}
+
+func TestParse_ExecRequiresVolumes(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := Parse(map[string]string{
+		"volkeep.enable": "true",
+		"volkeep.exec":   "pg_dump -f /dump/db.dump app",
+	})
+	require.Error(t, err)
+}
+
+func TestParse_InvalidExec(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []string{"  ", "sh -c 'unterminated"} {
+		_, _, err := Parse(map[string]string{
+			"volkeep.enable":  "true",
+			"volkeep.volumes": "dump",
+			"volkeep.exec":    v,
+		})
+		require.Error(t, err, "value %q should be rejected", v)
+	}
+}
+
+func TestSplitCommand(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string][]string{
+		"pg_dump -U app app":                      {"pg_dump", "-U", "app", "app"},
+		"/bin/sh -c 'pg_dump app > /dump/db.sql'": {"/bin/sh", "-c", "pg_dump app > /dump/db.sql"},
+		`sh -c "echo 'hi'"`:                       {"sh", "-c", "echo 'hi'"},
+		"cmd ''":                                  {"cmd", ""},
+		"  spaced\targs  ":                        {"spaced", "args"},
+		"":                                        nil,
+	}
+	for in, want := range cases {
+		got, err := splitCommand(in)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got, in)
+	}
+
+	_, err := splitCommand("sh -c 'oops")
+	require.Error(t, err, "unterminated quote")
 }
 
 func TestParse_InvalidStop(t *testing.T) {

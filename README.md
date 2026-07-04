@@ -14,12 +14,13 @@ repository: a local Docker volume, S3, or an rclone remote.
 
 ## Service labels
 
-| Label                    | Default          | Purpose                          |
-| ------------------------ | ---------------- | -------------------------------- |
-| `volkeep.enable`         | required         | `true` to opt this container in  |
-| `volkeep.stop`           | `false`          | Stop the container during backup |
-| `volkeep.volumes`        | all named mounts | Comma-separated whitelist        |
-| `volkeep.retention-days` | daemon default   | Daily snapshots to keep          |
+| Label                    | Default          | Purpose                                 |
+| ------------------------ | ---------------- | --------------------------------------- |
+| `volkeep.enable`         | required         | `true` to opt this container in         |
+| `volkeep.stop`           | `false`          | Stop the container during backup        |
+| `volkeep.exec`           | —                | Pre-backup command run in the container |
+| `volkeep.volumes`        | all named mounts | Comma-separated whitelist               |
+| `volkeep.retention-days` | daemon default   | Daily snapshots to keep                 |
 
 ```yml
 name: app
@@ -82,6 +83,13 @@ Run a backup pass on demand:
 ```sh
 docker kill -s SIGUSR1 volkeep
 ```
+
+## Databases
+
+A live database can be dumped instead of stopped: `volkeep.exec` runs a
+command inside the container before its volumes are backed up, and
+`volkeep.volumes` must whitelist the volume receiving the dump. A non-zero
+exit skips the backup.
 
 ## Deploy
 

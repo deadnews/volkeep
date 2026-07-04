@@ -21,6 +21,7 @@ type dockerClient interface {
 	HasImage(ctx context.Context, ref string) bool
 	ListLabeled(ctx context.Context, labelKey string) ([]dockerx.Container, error)
 	Run(ctx context.Context, spec *dockerx.RunSpec) (dockerx.RunResult, error)
+	Exec(ctx context.Context, id string, argv []string) (dockerx.RunResult, error)
 	Stop(ctx context.Context, id string) error
 	Start(ctx context.Context, id string) error
 }
@@ -113,7 +114,7 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	slog.Info("Backup pass starting", "targets", len(targets))
 
 	succeeded := 0
-	for _, g := range groupByStop(targets) {
+	for _, g := range groupByContainer(targets) {
 		if ctx.Err() != nil {
 			return
 		}
@@ -197,6 +198,9 @@ func (d *Daemon) runGroup(ctx context.Context, group []Target) int {
 		return 0
 	}
 	head := group[0]
+	if len(head.Exec) > 0 && !d.execHook(ctx, &head) {
+		return 0
+	}
 	// Pre-stopped containers must stay stopped after the pass.
 	shouldStop := head.Stop && head.Container.Running
 	if shouldStop {
@@ -228,6 +232,28 @@ func (d *Daemon) runGroup(ctx context.Context, group []Target) int {
 		}
 	}
 	return len(succeeded)
+}
+
+// execHook runs the pre-backup command and reports whether the group can proceed.
+func (d *Daemon) execHook(ctx context.Context, t *Target) bool {
+	if !t.Container.Running {
+		slog.Error("Exec skipped: container not running; skipping group", "container", t.Container.Name)
+		return false
+	}
+	start := time.Now()
+	res, err := d.docker.Exec(ctx, t.Container.ID, t.Exec)
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Exec failed; skipping group",
+			"container", t.Container.Name,
+			"exit", res.ExitCode, "error", err, "logs", res.Logs,
+		)
+		return false
+	}
+	slog.Info("Exec finished",
+		"container", t.Container.Name,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
+	return true
 }
 
 func (d *Daemon) backupOne(ctx context.Context, t *Target) bool {

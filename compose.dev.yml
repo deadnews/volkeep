@@ -40,6 +40,22 @@ services:
       volkeep.enable: true
       volkeep.stop: true
 
+  postgres:
+    image: postgres:18-alpine
+    container_name: volkeep-postgres
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql:rw
+      - pgdump:/dump:rw
+    environment:
+      POSTGRES_DB: sample
+      POSTGRES_USER: sample
+      POSTGRES_PASSWORD: sample
+    labels:
+      volkeep.enable: true
+      volkeep.exec: pg_dump -U sample -Fc -Z0 -f /dump/db.dump sample
+      volkeep.volumes: volkeep_pgdump
+
   dsproxy:
     image: wollomatic/socket-proxy:1
     container_name: volkeep-dsproxy
@@ -59,9 +75,9 @@ services:
     volumes:
       - ${XDG_RUNTIME_DIR:-/var/run}/docker.sock:/var/run/docker.sock:ro
     environment:
-      SP_ALLOW_GET: /v1\..{1,2}/(version|_ping|containers/json|containers/[^/]+/logs|images/.+/json)
+      SP_ALLOW_GET: /v1\..{1,2}/(version|_ping|containers/json|containers/[^/]+/logs|exec/[^/]+/json|images/.+/json)
       SP_ALLOW_HEAD: /_ping
-      SP_ALLOW_POST: /v1\..{1,2}/(containers/create|containers/[^/]+/(start|stop|wait)|images/create)
+      SP_ALLOW_POST: /v1\..{1,2}/(containers/create|containers/[^/]+/(start|stop|wait|exec)|exec/[^/]+/start|images/create)
       SP_ALLOW_DELETE: /v1\..{1,2}/containers/[^/]+
       SP_ALLOWFROM: volkeep
       SP_ALLOWHEALTHCHECK: true
@@ -76,6 +92,14 @@ networks:
 volumes:
   backup:
   data:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+  pgdata:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+  pgdump:
     driver_opts:
       type: tmpfs
       device: tmpfs

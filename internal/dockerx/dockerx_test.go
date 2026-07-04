@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 // TestRunDemuxesLogs guards against raw multiplexed frame headers leaking
@@ -36,6 +37,36 @@ func TestRunDemuxesLogs(t *testing.T) {
 	assert.Contains(t, res.Logs, "out")
 	assert.Contains(t, res.Logs, "err")
 	assert.NotContains(t, res.Logs, "\x00")
+}
+
+func TestExec(t *testing.T) {
+	if os.Getenv("TESTCONTAINERS") != "1" {
+		t.Skip("Skipping integration test, set TESTCONTAINERS=1 to run it.")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	dx, err := New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = dx.Close() })
+
+	app, err := testcontainers.Run(ctx, "busybox:musl",
+		testcontainers.WithCmd("sh", "-c", "trap 'exit 0' TERM; sleep 3600 & wait"),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
+
+	res, err := dx.Exec(ctx, app.GetContainerID(), []string{"sh", "-c", "echo out; echo err >&2"})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+	assert.Contains(t, res.Logs, "out")
+	assert.Contains(t, res.Logs, "err")
+	assert.NotContains(t, res.Logs, "\x00")
+
+	res, err = dx.Exec(ctx, app.GetContainerID(), []string{"sh", "-c", "exit 7"})
+	require.NoError(t, err)
+	assert.Equal(t, 7, res.ExitCode)
 }
 
 func TestIsAnonVolume(t *testing.T) {

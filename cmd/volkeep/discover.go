@@ -12,6 +12,7 @@ import (
 type Target struct {
 	Container     dockerx.Container
 	Volume        dockerx.Volume
+	Exec          []string
 	RetentionDays int
 	Stop          bool
 }
@@ -46,6 +47,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Target {
 			out = append(out, Target{
 				Container:     c,
 				Volume:        v,
+				Exec:          spec.Exec,
 				RetentionDays: retention,
 				Stop:          spec.Stop,
 			})
@@ -73,25 +75,26 @@ func pickVolumes(c dockerx.Container, wanted []string) ([]dockerx.Volume, error)
 	return out, nil
 }
 
-// groupByStop batches targets sharing a stop-container so it's stopped only once.
-func groupByStop(targets []Target) [][]Target {
+// groupByContainer batches targets by container so its stop or exec happens once.
+func groupByContainer(targets []Target) [][]Target {
 	var (
-		out      [][]Target
-		stopKeys []string
-		groups   = make(map[string][]Target)
+		out    [][]Target
+		keys   []string
+		groups = make(map[string][]Target)
 	)
-	for _, t := range targets {
-		if !t.Stop {
-			out = append(out, []Target{t})
+	for i := range targets {
+		t := &targets[i]
+		if !t.Stop && len(t.Exec) == 0 {
+			out = append(out, []Target{*t})
 			continue
 		}
 		key := t.Container.ID
 		if _, ok := groups[key]; !ok {
-			stopKeys = append(stopKeys, key)
+			keys = append(keys, key)
 		}
-		groups[key] = append(groups[key], t)
+		groups[key] = append(groups[key], *t)
 	}
-	for _, k := range stopKeys {
+	for _, k := range keys {
 		out = append(out, groups[k])
 	}
 	return out
