@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/mount"
@@ -277,7 +276,6 @@ func (d *Daemon) backupOne(ctx context.Context, volume string) bool {
 		slog.Info("Backup finished",
 			"volume", volume,
 			"duration_ms", dur.Milliseconds(),
-			"summary", strings.TrimSpace(res.Logs),
 		)
 	}
 	return true

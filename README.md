@@ -8,9 +8,10 @@
 [![CI: Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/deadnews/volkeep/refs/heads/badges/coverage.json)](https://github.com/deadnews/volkeep)
 
 Containers opt in via labels. At the scheduled time the daemon backs up their
-named volumes through ephemeral `restic` workers, optionally stopping the
-container for the duration, then prunes old snapshots. Backups land in a restic
-repository: a local Docker volume, S3, or an rclone remote.
+named volumes, optionally stopping the container for the duration, then prunes
+old snapshots. Backups land in a restic repository: a local Docker volume, S3,
+or an rclone remote. The daemon runs `restic` in a short-lived container named
+`volkeep-worker`.
 
 ## Service labels
 
