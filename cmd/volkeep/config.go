@@ -23,6 +23,7 @@ type Config struct {
 	Minute         int
 	Jitter         time.Duration
 	RetentionDays  int
+	MaxAgeDays     int
 	Check          bool
 	ResticImage    string
 	HostTag        string
@@ -54,6 +55,18 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("VOLKEEP_RETENTION_DAYS: must be positive int, got %q", v)
 		}
 		retention = n
+	}
+
+	maxAge := 0
+	if v := os.Getenv("VOLKEEP_MAX_AGE_DAYS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("VOLKEEP_MAX_AGE_DAYS: must be non-negative int, got %q", v)
+		}
+		if n > 0 && n <= retention {
+			return nil, fmt.Errorf("VOLKEEP_MAX_AGE_DAYS (%d) must exceed VOLKEEP_RETENTION_DAYS (%d)", n, retention)
+		}
+		maxAge = n
 	}
 
 	var jitter time.Duration
@@ -96,6 +109,7 @@ func LoadConfig() (*Config, error) {
 		Minute:         minute,
 		Jitter:         jitter,
 		RetentionDays:  retention,
+		MaxAgeDays:     maxAge,
 		Check:          check,
 		ResticImage:    cmp.Or(os.Getenv("VOLKEEP_RESTIC_IMAGE"), defaultResticImage),
 		HostTag:        hostTag,

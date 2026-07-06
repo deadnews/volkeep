@@ -8,17 +8,19 @@ import (
 	"github.com/deadnews/volkeep/internal/label"
 )
 
-// Target is one volume slated for backup, resolved from a labeled container.
-type Target struct {
+// Group is one container's backup batch: its volumes plus the optional
+// exec and stop that wrap them.
+type Group struct {
 	Container     dockerx.Container
-	Volume        dockerx.Volume
+	Volumes       []dockerx.Volume
+	Exec          []string
 	RetentionDays int
 	Stop          bool
 }
 
-// discover resolves labeled containers into targets, skipping invalid ones.
-func discover(containers []dockerx.Container, defaultRetention int) []Target {
-	out := make([]Target, 0, len(containers))
+// discover resolves labeled containers into backup groups, skipping invalid ones.
+func discover(containers []dockerx.Container, defaultRetention int) []Group {
+	out := make([]Group, 0, len(containers))
 	seen := make(map[string]bool) // a shared volume is backed up once
 	for _, c := range containers {
 		spec, enabled, err := label.Parse(c.Labels)
@@ -34,22 +36,27 @@ func discover(containers []dockerx.Container, defaultRetention int) []Target {
 			slog.Error("Skipping container: volume error", "container", c.Name, "error", err)
 			continue
 		}
+		var kept []dockerx.Volume
+		for _, v := range vols {
+			if !seen[v.Name] {
+				seen[v.Name] = true
+				kept = append(kept, v)
+			}
+		}
+		if len(kept) == 0 {
+			continue
+		}
 		retention := defaultRetention
 		if spec.RetentionDays > 0 {
 			retention = spec.RetentionDays
 		}
-		for _, v := range vols {
-			if seen[v.Name] {
-				continue
-			}
-			seen[v.Name] = true
-			out = append(out, Target{
-				Container:     c,
-				Volume:        v,
-				RetentionDays: retention,
-				Stop:          spec.Stop,
-			})
-		}
+		out = append(out, Group{
+			Container:     c,
+			Volumes:       kept,
+			Exec:          spec.Exec,
+			RetentionDays: retention,
+			Stop:          spec.Stop,
+		})
 	}
 	return out
 }
@@ -71,28 +78,4 @@ func pickVolumes(c dockerx.Container, wanted []string) ([]dockerx.Volume, error)
 		out = append(out, v)
 	}
 	return out, nil
-}
-
-// groupByStop batches targets sharing a stop-container so it's stopped only once.
-func groupByStop(targets []Target) [][]Target {
-	var (
-		out      [][]Target
-		stopKeys []string
-		groups   = make(map[string][]Target)
-	)
-	for _, t := range targets {
-		if !t.Stop {
-			out = append(out, []Target{t})
-			continue
-		}
-		key := t.Container.ID
-		if _, ok := groups[key]; !ok {
-			stopKeys = append(stopKeys, key)
-		}
-		groups[key] = append(groups[key], t)
-	}
-	for _, k := range stopKeys {
-		out = append(out, groups[k])
-	}
-	return out
 }

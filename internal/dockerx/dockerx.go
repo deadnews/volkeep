@@ -1,5 +1,6 @@
 // Package dockerx wraps the Docker SDK with the operations volkeep needs:
-// list labelled containers, stop/start them, and run ephemeral workers.
+// list labelled containers, stop/start them, exec commands in them,
+// and run ephemeral workers.
 package dockerx
 
 import (
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -114,6 +116,45 @@ func (c *Client) Start(ctx context.Context, id string) error {
 		return fmt.Errorf("start %s: %w", id, err)
 	}
 	return nil
+}
+
+// Exec runs argv inside a running container and waits for it to finish.
+func (c *Client) Exec(ctx context.Context, id string, argv []string) (RunResult, error) {
+	exec, err := c.api.ContainerExecCreate(ctx, id, container.ExecOptions{
+		Cmd:          argv,
+		AttachStdout: true,
+		AttachStderr: true,
+	})
+	if err != nil {
+		return RunResult{ExitCode: -1}, fmt.Errorf("exec create %s: %w", id, err)
+	}
+
+	resp, err := c.api.ContainerExecAttach(ctx, exec.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return RunResult{ExitCode: -1}, fmt.Errorf("exec attach %s: %w", id, err)
+	}
+	defer resp.Close()
+
+	var buf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&buf, &buf, resp.Reader); err != nil {
+		return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec read %s: %w", id, err)
+	}
+
+	// Stream EOF can precede the daemon recording the exit code; poll until done.
+	for {
+		ins, err := c.api.ContainerExecInspect(ctx, exec.ID)
+		if err != nil {
+			return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec inspect %s: %w", id, err)
+		}
+		if !ins.Running {
+			return RunResult{ExitCode: ins.ExitCode, Logs: buf.String()}, nil
+		}
+		select {
+		case <-ctx.Done():
+			return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec wait %s: %w", id, ctx.Err())
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 // RunSpec describes an ephemeral worker container.

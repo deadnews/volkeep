@@ -8,18 +8,20 @@
 [![CI: Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/deadnews/volkeep/refs/heads/badges/coverage.json)](https://github.com/deadnews/volkeep)
 
 Containers opt in via labels. At the scheduled time the daemon backs up their
-named volumes through ephemeral `restic` workers, optionally stopping the
-container for the duration, then prunes old snapshots. Backups land in a restic
-repository: a local Docker volume, S3, or an rclone remote.
+named volumes, optionally stopping the container for the duration, then prunes
+old snapshots. Backups land in a restic repository: a local Docker volume, S3,
+or an rclone remote. The daemon runs `restic` in a short-lived container named
+`volkeep-worker`.
 
 ## Service labels
 
-| Label                    | Default          | Purpose                          |
-| ------------------------ | ---------------- | -------------------------------- |
-| `volkeep.enable`         | required         | `true` to opt this container in  |
-| `volkeep.stop`           | `false`          | Stop the container during backup |
-| `volkeep.volumes`        | all named mounts | Comma-separated whitelist        |
-| `volkeep.retention-days` | daemon default   | Daily snapshots to keep          |
+| Label                    | Default          | Purpose                                 |
+| ------------------------ | ---------------- | --------------------------------------- |
+| `volkeep.enable`         | required         | `true` to opt this container in         |
+| `volkeep.stop`           | `false`          | Stop the container during backup        |
+| `volkeep.exec-pre`       | —                | Pre-backup command run in the container |
+| `volkeep.volumes`        | all named mounts | Comma-separated whitelist               |
+| `volkeep.retention-days` | daemon default   | Daily snapshots to keep                 |
 
 ```yml
 name: app
@@ -51,6 +53,7 @@ Snapshots are tagged with the volume name.
 | `AWS_*`                  | —               | Forwarded to workers (S3 backends)       |
 | `RCLONE_*`               | —               | Forwarded to workers (rclone backends)   |
 | `VOLKEEP_RETENTION_DAYS` | `5`             | Daily snapshots to keep                  |
+| `VOLKEEP_MAX_AGE_DAYS`   | `0`             | Remove snapshots older than this         |
 | `VOLKEEP_CHECK`          | `true`          | Verify repo integrity after each pass    |
 | `VOLKEEP_JITTER`         | `0`             | Random pre-fire delay (e.g. `30m`)       |
 | `VOLKEEP_RESTIC_IMAGE`   | `restic/restic` | Worker image                             |
@@ -69,6 +72,10 @@ For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
 
+`VOLKEEP_MAX_AGE_DAYS` ages out snapshots of volumes that are no longer backed up,
+whether the service is gone or its volume set changed; `0` keeps them forever.
+The cutoff must exceed retention window.
+
 ## Multi-host
 
 By design, each host runs its own daemon and repository. To share a single S3
@@ -83,11 +90,19 @@ Run a backup pass on demand:
 docker kill -s SIGUSR1 volkeep
 ```
 
+## Databases
+
+A live database can be dumped instead of stopped: `volkeep.exec-pre`
+runs a command inside the container before its volumes are backed up;
+`volkeep.volumes` must whitelist the volume receiving the dump.
+A non-zero exit skips the backup.
+Wrap it in `/bin/sh -c '...'` for redirection or variable expansion.
+
 ## Deploy
 
 `volkeep` needs access to the Docker API. [`compose.dev.yml`](./compose.dev.yml)
-wires it through a socket-proxy and shows the full stack. The snippets
-below cover only `volkeep`'s own config.
+wires it through a socket-proxy and shows the full stack.
+The snippets below cover only `volkeep`'s own config.
 
 Local:
 
@@ -129,8 +144,9 @@ services:
 
 ## Restore
 
-Backups are stored in an ordinary `restic` repository. Drive it with any
-`restic` command (`restore`, `mount`). See the [restic docs](https://restic.readthedocs.io/en/stable/050_restore.html).
+Backups are stored in an ordinary `restic` repository.
+Drive it with any `restic` command (`restore`, `mount`).
+See the [restic docs](https://restic.readthedocs.io/en/stable/050_restore.html).
 
 Local:
 
