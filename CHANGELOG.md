@@ -1,10 +1,10 @@
 # Changelog
 
-## [0.1.0-alpha.0](https://github.com/deadnews/volkeep/compare/v0.0.4...v0.1.0-alpha.0) - 2026-07-04
+## [0.1.0](https://github.com/deadnews/volkeep/compare/v0.0.4...v0.1.0) - 2026-07-06
 
 ### Features
 
-- add `volkeep.exec` pre-backup command - ([0a96d8a](https://github.com/deadnews/volkeep/commit/0a96d8af3f6d81a9a63d8e0ecbdd80622b487289))
+- add `volkeep.exec-pre` pre-backup command ([#8](https://github.com/deadnews/volkeep/issues/8)) - ([9d8fe3f](https://github.com/deadnews/volkeep/commit/9d8fe3f8e7f613c62bc330b59e3fcad04282aafe))
 
 ## [0.0.4](https://github.com/deadnews/volkeep/compare/v0.0.3...v0.0.4) - 2026-06-23
 
