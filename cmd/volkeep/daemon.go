@@ -63,7 +63,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		if !d.docker.HasImage(ctx, d.cfg.ResticImage) {
 			return fmt.Errorf("pull restic image: %w", err)
 		}
-		slog.Warn("Pull failed; using local image", "image", d.cfg.ResticImage, "error", err)
+		slog.Warn("Failed to pull image; using local", "image", d.cfg.ResticImage, "error", err)
 	}
 	if err := d.initRepo(ctx); err != nil {
 		return err
@@ -95,7 +95,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 		return true
 	}
 	delay := time.Duration(rand.Int64N(int64(d.cfg.Jitter))) //nolint:gosec // jitter is non-security
-	slog.Info("Jitter delay", "for", delay)
+	slog.Info("Jitter delay", "duration", delay)
 	select {
 	case <-ctx.Done():
 		return false
@@ -107,7 +107,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 func (d *Daemon) runOnce(ctx context.Context) {
 	raw, err := d.docker.ListLabeled(ctx, label.Prefix+"enable")
 	if err != nil {
-		slog.Error("Discovery failed", "error", err)
+		slog.Error("Failed to discover containers", "error", err)
 		return
 	}
 	groups := discover(raw, d.cfg.RetentionDays)
@@ -196,7 +196,7 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 	if shouldStop {
 		slog.Info("Stopping container", "container", g.Container.Name)
 		if err := d.docker.Stop(ctx, g.Container.ID); err != nil {
-			slog.Error("Stop failed; skipping group", "container", g.Container.Name, "error", err)
+			slog.Error("Failed to stop container; skipping group", "container", g.Container.Name, "error", err)
 			return 0
 		}
 	}
@@ -212,7 +212,7 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 		// Restart even on shutdown, or a SIGTERM mid-pass strands the container.
 		startCtx := context.WithoutCancel(ctx)
 		if err := d.docker.Start(startCtx, g.Container.ID); err != nil {
-			slog.Error("Restart failed", "container", g.Container.Name, "error", err)
+			slog.Error("Failed to restart container", "container", g.Container.Name, "error", err)
 		}
 	}
 

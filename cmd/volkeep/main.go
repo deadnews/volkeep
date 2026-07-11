@@ -15,7 +15,7 @@ import (
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	if err := run(); err != nil {
-		slog.Error("Daemon exited with error", "error", err)
+		slog.Error("Fatal error", "error", err)
 		os.Exit(1)
 	}
 }
@@ -30,7 +30,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("docker client: %w", err)
 	}
-	defer func() { _ = dx.Close() }()
+	defer func() {
+		if err := dx.Close(); err != nil {
+			slog.Error("Failed to close Docker client", "error", err)
+		}
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

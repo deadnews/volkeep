@@ -25,7 +25,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 	for _, c := range containers {
 		spec, enabled, err := label.Parse(c.Labels)
 		if err != nil {
-			slog.Error("Skipping container: invalid labels", "container", c.Name, "error", err)
+			slog.Error("Failed to parse labels; skipping container", "container", c.Name, "error", err)
 			continue
 		}
 		if !enabled {
@@ -33,7 +33,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 		}
 		vols, err := pickVolumes(c, spec.Volumes)
 		if err != nil {
-			slog.Error("Skipping container: volume error", "container", c.Name, "error", err)
+			slog.Error("Failed to resolve volumes; skipping container", "container", c.Name, "error", err)
 			continue
 		}
 		var kept []dockerx.Volume

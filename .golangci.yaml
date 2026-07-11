@@ -82,6 +82,7 @@ linters:
         - shadow
     nolintlint:
       require-specific: true
+      require-explanation: true
   exclusions:
     rules:
       - source: "^\\s*defer\\s+"

@@ -7,6 +7,8 @@
 [![CI: Main](https://img.shields.io/github/actions/workflow/status/deadnews/volkeep/main.yml?branch=main&logo=github&logoColor=white&label=main)](https://github.com/deadnews/volkeep)
 [![CI: Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/deadnews/volkeep/refs/heads/badges/coverage.json)](https://github.com/deadnews/volkeep)
 
+**[Service labels](#service-labels)** • **[Daemon configuration](#daemon-configuration)** • **[Multi-host](#multi-host)** • **[Manual trigger](#manual-trigger)** • **[Databases](#databases)** • **[Deploy](#deploy)** • **[Restore](#restore)**
+
 Containers opt in via labels. At the scheduled time the daemon backs up their
 named volumes, optionally stopping the container for the duration, then prunes
 old snapshots. Backups land in a restic repository: a local Docker volume, S3,
