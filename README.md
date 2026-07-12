@@ -9,11 +9,11 @@
 
 **[Service labels](#service-labels)** • **[Daemon configuration](#daemon-configuration)** • **[Multi-host](#multi-host)** • **[Manual trigger](#manual-trigger)** • **[Databases](#databases)** • **[Deploy](#deploy)** • **[Restore](#restore)**
 
-Containers opt in via labels. At the scheduled time the daemon backs up their
-named volumes, optionally stopping the container for the duration, then prunes
-old snapshots. Backups land in a restic repository: a local Docker volume, S3,
-or an rclone remote. The daemon runs `restic` in a short-lived container named
-`volkeep-worker`.
+- Containers opt in via labels. At the scheduled time the daemon backs up
+  their named volumes, optionally stopping the container for the duration
+  or running a pre-backup command inside it.
+- Backups land in a restic repository:
+  a local Docker volume, S3, or an rclone remote.
 
 ## Service labels
 
@@ -41,10 +41,12 @@ volumes:
   data:
 ```
 
-Bind mounts and anonymous volumes are skipped.
-Snapshots are tagged with the volume name.
+- Bind mounts and anonymous volumes are skipped.
+- Snapshots are tagged with the full volume name.
 
 ## Daemon configuration
+
+The daemon runs `restic` in a short-lived worker container named `volkeep-worker`.
 
 | Env                      | Default         | Description                              |
 | ------------------------ | --------------- | ---------------------------------------- |
@@ -65,11 +67,11 @@ Snapshots are tagged with the volume name.
 
 - **Local** — `volume:<name>` uses a Docker named volume as the repo, backed by
   a bind mount or any driver via `driver_opts`.
-- **Remote** — an S3 or rclone backend URI.
 
-For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
-`rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
-`RCLONE_CONFIG_*`.
+- **Remote** — an S3 or rclone backend URI. \
+  For `rclone` remotes, point `VOLKEEP_RESTIC_IMAGE` at an image bundling the
+  `rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
+  `RCLONE_CONFIG_*`.
 
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
@@ -80,9 +82,11 @@ The cutoff must exceed retention window.
 
 ## Multi-host
 
-By design, each host runs its own daemon and repository. To share a single S3
-bucket, give each host a distinct prefix (`s3:s3.host.com/bucket/<host>`) and
-set `VOLKEEP_JITTER` to spread concurrent fires.
+By design, each host runs its own daemon and repository.
+To share a single S3 bucket:
+
+- Give each host a distinct prefix: `s3:s3.host.com/bucket/<host>`.
+- Set `VOLKEEP_JITTER` to spread concurrent fires.
 
 ## Manual trigger
 
@@ -94,11 +98,12 @@ docker kill -s SIGUSR1 volkeep
 
 ## Databases
 
-A live database can be dumped instead of stopped: `volkeep.exec-pre`
-runs a command inside the container before its volumes are backed up;
-`volkeep.volumes` must whitelist the volume receiving the dump.
-A non-zero exit skips the backup.
-Wrap it in `/bin/sh -c '...'` for redirection or variable expansion.
+A live database can be dumped instead of stopped:
+
+- `volkeep.exec-pre` runs a command inside the container before its volumes
+  are backed up. A non-zero exit skips the backup.
+- `volkeep.volumes` must whitelist the volume receiving the dump.
+- Wrap the command in `/bin/sh -c '...'` for redirection or variable expansion.
 
 ## Deploy
 
