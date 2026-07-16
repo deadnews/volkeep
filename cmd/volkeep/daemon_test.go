@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
@@ -73,6 +75,11 @@ func TestDaemon_RunOnce(t *testing.T) {
 	SkipIfNoTestcontainers(t)
 	ctx, _, d := setupDaemon(t)
 
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo hello > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
 		testcontainers.WithLabels(map[string]string{
@@ -91,6 +98,8 @@ func TestDaemon_RunOnce(t *testing.T) {
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_runonce", "snapshot for our volume should be listed")
+	assert.Contains(t, logBuf.String(), "snapshot_id=", "backup summary fields are emitted")
+	assert.Contains(t, logBuf.String(), "data_added=", "backup summary fields are emitted")
 }
 
 func TestDaemon_PreStoppedStaysDown(t *testing.T) {

@@ -279,22 +279,37 @@ func (d *Daemon) backupOne(ctx context.Context, volume string) bool {
 		slog.Error("Backup failed",
 			"volume", volume,
 			"duration_ms", dur.Milliseconds(),
-			"exit", res.ExitCode, "error", err, "logs", res.Logs,
+			"exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs),
 		)
 		return false
 	case res.ExitCode == restic.ExitBackupPartial:
-		slog.Warn("Backup completed with unreadable files",
-			"volume", volume,
-			"duration_ms", dur.Milliseconds(),
-			"logs", res.Logs,
-		)
+		attrs := append(backupAttrs(volume, dur, res.Logs), "logs", restic.PlainLogs(res.Logs))
+		slog.Warn("Backup completed with unreadable files", attrs...)
 	default:
-		slog.Info("Backup finished",
-			"volume", volume,
-			"duration_ms", dur.Milliseconds(),
-		)
+		slog.Info("Backup finished", backupAttrs(volume, dur, res.Logs)...)
 	}
 	return true
+}
+
+// backupAttrs builds the backup log attrs, extended with the worker's
+// --json summary fields when the summary is present.
+func backupAttrs(volume string, dur time.Duration, logs string) []any {
+	attrs := make([]any, 0, 12)
+	attrs = append(attrs, "volume", volume, "duration_ms", dur.Milliseconds())
+	sum, ok := restic.ParseBackupSummary(logs)
+	if !ok {
+		return attrs
+	}
+	id := sum.SnapshotID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return append(attrs,
+		"snapshot_id", id,
+		"data_added", sum.DataAdded,
+		"data_added_packed", sum.DataAddedPacked,
+		"bytes_processed", sum.TotalBytesProcessed,
+	)
 }
 
 func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {

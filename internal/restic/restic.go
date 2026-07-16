@@ -2,6 +2,7 @@
 package restic
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 )
@@ -56,11 +57,13 @@ func UnlockArgs() []string { return []string{noCache, "unlock"} }
 // CheckArgs returns argv for a structural integrity check.
 func CheckArgs() []string { return []string{noCache, retryLock, "check"} }
 
-// BackupArgs returns argv for backing up /data.
+// BackupArgs returns argv for backing up /data. Workers run --json for the
+// machine-readable summary and --quiet to drop the per-interval status lines.
 func BackupArgs(hostTag, tag string) []string {
 	return []string{
 		noCache,
 		retryLock,
+		"--json", "--quiet",
 		"backup", "/data",
 		"--host", hostTag,
 		"--tag", tag,
@@ -90,3 +93,52 @@ func SweepArgs(maxAgeDays int) []string {
 
 // PruneArgs returns argv for removing data unreferenced after forgets.
 func PruneArgs() []string { return []string{noCache, retryLock, "prune"} }
+
+// BackupSummary is the summary message emitted by `backup --json`.
+type BackupSummary struct {
+	MessageType         string `json:"message_type"`
+	DataAdded           uint64 `json:"data_added"`
+	DataAddedPacked     uint64 `json:"data_added_packed"`
+	TotalBytesProcessed uint64 `json:"total_bytes_processed"`
+	SnapshotID          string `json:"snapshot_id"`
+}
+
+// ParseBackupSummary extracts the summary message from backup worker output.
+func ParseBackupSummary(logs string) (BackupSummary, bool) {
+	for line := range strings.Lines(logs) {
+		var s BackupSummary
+		if err := json.Unmarshal([]byte(line), &s); err == nil && s.MessageType == "summary" {
+			return s, true
+		}
+	}
+	return BackupSummary{}, false
+}
+
+// jsonLogLine is the subset of `backup --json` message fields worth re-printing.
+type jsonLogLine struct {
+	MessageType string `json:"message_type"`
+	Message     string `json:"message"` // exit_error
+	Error       struct {
+		Message string `json:"message"`
+	} `json:"error"` // error
+}
+
+// PlainLogs flattens `backup --json` output into plain error text:
+// error messages are unwrapped, other JSON is dropped, non-JSON passes through.
+func PlainLogs(logs string) string {
+	var b strings.Builder
+	for line := range strings.Lines(logs) {
+		var m jsonLogLine
+		if err := json.Unmarshal([]byte(line), &m); err != nil || m.MessageType == "" {
+			b.WriteString(line)
+			continue
+		}
+		switch m.MessageType {
+		case "error":
+			b.WriteString(m.Error.Message + "\n")
+		case "exit_error":
+			b.WriteString(m.Message + "\n")
+		}
+	}
+	return b.String()
+}
