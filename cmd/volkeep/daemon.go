@@ -105,6 +105,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 }
 
 func (d *Daemon) runOnce(ctx context.Context) {
+	start := time.Now()
 	raw, err := d.docker.ListLabeled(ctx, label.Prefix+"enable")
 	if err != nil {
 		slog.Error("Failed to discover containers", "error", err)
@@ -132,7 +133,7 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	if ctx.Err() == nil {
 		d.stats(ctx)
 	}
-	slog.Info("Backup pass finished")
+	slog.Info("Backup pass finished", "duration_ms", time.Since(start).Milliseconds())
 }
 
 // workerSpec assembles the RunSpec shared by every restic worker.

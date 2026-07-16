@@ -34,8 +34,11 @@ type RepoStats struct {
 // ParseRepoStats extracts the result from stats worker output.
 func ParseRepoStats(logs string) (RepoStats, bool) {
 	for line := range strings.Lines(logs) {
+		if !strings.Contains(line, `"total_size"`) {
+			continue
+		}
 		var s RepoStats
-		if err := json.Unmarshal([]byte(line), &s); err == nil && s.TotalSize > 0 {
+		if err := json.Unmarshal([]byte(line), &s); err == nil {
 			return s, true
 		}
 	}

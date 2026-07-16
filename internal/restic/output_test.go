@@ -34,6 +34,10 @@ func TestParseRepoStats(t *testing.T) {
 	assert.Equal(t, uint64(52428800), stats.TotalSize)
 	assert.Equal(t, 42, stats.SnapshotsCount)
 
+	empty, ok := ParseRepoStats(`{"total_size":0,"snapshots_count":0}` + "\n")
+	assert.True(t, ok, "an empty repository is a valid stats result")
+	assert.Equal(t, uint64(0), empty.TotalSize)
+
 	_, ok = ParseRepoStats("scanning...\n")
 	assert.False(t, ok)
 }
