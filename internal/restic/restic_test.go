@@ -34,19 +34,19 @@ func TestArgs(t *testing.T) {
 	assert.Equal(t, []string{"init"}, InitArgs())
 	assert.Equal(t, []string{"cat", "config", "--no-lock"}, CatConfigArgs())
 	assert.Equal(t, []string{"unlock"}, UnlockArgs())
-	assert.Equal(t, []string{retryLock, "check"}, CheckArgs())
+	assert.Equal(t, []string{"check"}, CheckArgs())
 	assert.Equal(t,
-		[]string{retryLock, "--json", "--quiet", "backup", "/data", "--host", "h1", "--tag", "rss2tg"},
+		[]string{"--json", "--quiet", "backup", "/data", "--host", "h1", "--tag", "rss2tg"},
 		BackupArgs("h1", "rss2tg"),
 	)
 	assert.Equal(t,
-		[]string{retryLock, "forget", "--tag", "rss2tg", "--keep-daily", "3"},
+		[]string{"forget", "--tag", "rss2tg", "--keep-daily", "3"},
 		ForgetArgs("rss2tg", 3),
 	)
 	assert.Equal(t,
-		[]string{retryLock, "forget", "--keep-within", "30d"},
+		[]string{"forget", "--keep-within", "30d"},
 		SweepArgs(30),
 	)
-	assert.Equal(t, []string{retryLock, "prune"}, PruneArgs())
-	assert.Equal(t, []string{retryLock, "--json", "stats", "--mode", "raw-data"}, StatsArgs())
+	assert.Equal(t, []string{"prune"}, PruneArgs())
+	assert.Equal(t, []string{"--json", "stats", "--mode", "raw-data"}, StatsArgs())
 }

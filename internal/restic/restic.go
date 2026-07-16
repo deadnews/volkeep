@@ -38,9 +38,6 @@ func prefixEnv(environ []string, prefix string) []string {
 	return out
 }
 
-// Wait out a prior worker's lock.
-const retryLock = "--retry-lock=7s"
-
 // InitArgs returns argv for `restic init`.
 func InitArgs() []string { return []string{"init"} }
 
@@ -51,12 +48,11 @@ func CatConfigArgs() []string { return []string{"cat", "config", "--no-lock"} }
 func UnlockArgs() []string { return []string{"unlock"} }
 
 // CheckArgs returns argv for a structural integrity check.
-func CheckArgs() []string { return []string{retryLock, "check"} }
+func CheckArgs() []string { return []string{"check"} }
 
 // BackupArgs returns argv for backing up /data.
 func BackupArgs(hostTag, tag string) []string {
 	return []string{
-		retryLock,
 		"--json", "--quiet",
 		"backup", "/data",
 		"--host", hostTag,
@@ -66,24 +62,16 @@ func BackupArgs(hostTag, tag string) []string {
 
 // ForgetArgs returns argv for forgetting snapshots scoped to a tag.
 func ForgetArgs(tag string, keepDays int) []string {
-	return []string{
-		retryLock, "forget", "--tag", tag, "--keep-daily", strconv.Itoa(keepDays),
-	}
+	return []string{"forget", "--tag", tag, "--keep-daily", strconv.Itoa(keepDays)}
 }
 
 // SweepArgs returns argv for forgetting snapshots older than maxAgeDays.
 func SweepArgs(maxAgeDays int) []string {
-	return []string{
-		retryLock, "forget", "--keep-within", strconv.Itoa(maxAgeDays) + "d",
-	}
+	return []string{"forget", "--keep-within", strconv.Itoa(maxAgeDays) + "d"}
 }
 
 // PruneArgs returns argv for removing data unreferenced after forgets.
-func PruneArgs() []string { return []string{retryLock, "prune"} }
+func PruneArgs() []string { return []string{"prune"} }
 
 // StatsArgs returns argv for measuring on-disk repository size.
-func StatsArgs() []string {
-	return []string{
-		retryLock, "--json", "stats", "--mode", "raw-data",
-	}
-}
+func StatsArgs() []string { return []string{"--json", "stats", "--mode", "raw-data"} }

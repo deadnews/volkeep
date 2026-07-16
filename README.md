@@ -73,6 +73,8 @@ The daemon runs `restic` in a short-lived worker container named `volkeep-worker
   `rclone` binary (e.g. `tofran/restic-rclone`) and configure it with
   `RCLONE_CONFIG_*`.
 
+`VOLKEEP_RESTIC_IMAGE` is pulled once at daemon start.
+
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
 
