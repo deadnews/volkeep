@@ -100,6 +100,7 @@ func TestDaemon_RunOnce(t *testing.T) {
 	assert.Contains(t, logs, "volkeep_test_runonce", "snapshot for our volume should be listed")
 	assert.Contains(t, logBuf.String(), "snapshot_id=", "backup summary fields are emitted")
 	assert.Contains(t, logBuf.String(), "data_added=", "backup summary fields are emitted")
+	assert.Contains(t, logBuf.String(), "total_size=", "repository stats are emitted")
 }
 
 func TestDaemon_PreStoppedStaysDown(t *testing.T) {

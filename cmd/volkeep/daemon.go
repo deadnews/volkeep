@@ -129,6 +129,9 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	if d.cfg.Check && ctx.Err() == nil {
 		d.check(ctx)
 	}
+	if ctx.Err() == nil {
+		d.stats(ctx)
+	}
 	slog.Info("Backup pass finished")
 }
 
@@ -166,6 +169,21 @@ func (d *Daemon) check(ctx context.Context) {
 		return
 	}
 	slog.Info("Repository check passed")
+}
+
+// stats logs the repository's on-disk size once per pass.
+func (d *Daemon) stats(ctx context.Context) {
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.StatsArgs()))
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Stats failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	stats, ok := restic.ParseRepoStats(res.Logs)
+	if !ok {
+		slog.Error("Failed to parse stats output", "logs", res.Logs)
+		return
+	}
+	slog.Info("Repository stats", "total_size", stats.TotalSize, "snapshots", stats.SnapshotsCount)
 }
 
 func (d *Daemon) repoMount() []mount.Mount {
@@ -291,8 +309,7 @@ func (d *Daemon) backupOne(ctx context.Context, volume string) bool {
 	return true
 }
 
-// backupAttrs builds the backup log attrs, extended with the worker's
-// --json summary fields when the summary is present.
+// backupAttrs returns the backup log attrs, plus summary fields when present.
 func backupAttrs(volume string, dur time.Duration, logs string) []any {
 	attrs := make([]any, 0, 12)
 	attrs = append(attrs, "volume", volume, "duration_ms", dur.Milliseconds())
