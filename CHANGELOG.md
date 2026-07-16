@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.1-alpha.0](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.1.1-alpha.0) - 2026-07-16
+
+### Bug fixes
+
+- remove stale restic locks at pass start - ([f056697](https://github.com/deadnews/volkeep/commit/f0566971999ef4220bbee51c6e90d26cd4fb96d2))
+
+### Refactor
+
+- normalize log messages and error strings - ([44433be](https://github.com/deadnews/volkeep/commit/44433be9f4976850853851a778f0b47e4836220b))
+
+### Documentation
+
+- _(readme)_ update - ([2dc407b](https://github.com/deadnews/volkeep/commit/2dc407bb349164c13a1865e9229c1e017d3cd5aa))
+
 ## [0.1.0](https://github.com/deadnews/volkeep/compare/v0.0.4...v0.1.0) - 2026-07-06
 
 ### Features
