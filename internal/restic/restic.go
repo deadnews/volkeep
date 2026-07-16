@@ -48,7 +48,10 @@ const retryLock = "--retry-lock=7s"
 func InitArgs() []string { return []string{noCache, "init"} }
 
 // CatConfigArgs returns argv for probing repo existence.
-func CatConfigArgs() []string { return []string{noCache, "cat", "config"} }
+func CatConfigArgs() []string { return []string{noCache, "cat", "config", "--no-lock"} }
+
+// UnlockArgs returns argv for removing stale repository locks.
+func UnlockArgs() []string { return []string{noCache, "unlock"} }
 
 // CheckArgs returns argv for a structural integrity check.
 func CheckArgs() []string { return []string{noCache, retryLock, "check"} }

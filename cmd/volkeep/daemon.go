@@ -112,6 +112,7 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	}
 	groups := discover(raw, d.cfg.RetentionDays)
 	slog.Info("Backup pass starting", "containers", len(groups))
+	d.unlock(ctx)
 
 	succeeded := 0
 	for i := range groups {
@@ -142,11 +143,26 @@ func (d *Daemon) workerSpec(args []string, mounts ...mount.Mount) *dockerx.RunSp
 	}
 }
 
+// unlock removes locks stranded by workers that died uncleanly. Safe alongside
+// a live operation: its lock refreshes every ~5 min and never turns stale.
+func (d *Daemon) unlock(ctx context.Context) {
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.UnlockArgs()))
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Unlock failed",
+			"exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	if res.Logs != "" {
+		slog.Warn("Removed stale repository locks", "logs", res.Logs)
+	}
+}
+
 // check verifies repo integrity.
 func (d *Daemon) check(ctx context.Context) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.CheckArgs()))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Repository check failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Repository check failed",
+			"exit", res.ExitCode, "error", err, "logs", res.Logs)
 		return
 	}
 	slog.Info("Repository check passed")

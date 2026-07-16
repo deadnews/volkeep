@@ -34,7 +34,8 @@ func TestRcloneEnv(t *testing.T) {
 func TestArgs(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, []string{noCache, "init"}, InitArgs())
-	assert.Equal(t, []string{noCache, "cat", "config"}, CatConfigArgs())
+	assert.Equal(t, []string{noCache, "cat", "config", "--no-lock"}, CatConfigArgs())
+	assert.Equal(t, []string{noCache, "unlock"}, UnlockArgs())
 	assert.Equal(t, []string{noCache, retryLock, "check"}, CheckArgs())
 	assert.Equal(t,
 		[]string{noCache, retryLock, "backup", "/data", "--host", "h1", "--tag", "rss2tg"},

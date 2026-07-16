@@ -231,19 +231,20 @@ func TestDaemon_ExecDump(t *testing.T) {
 
 // fakeDocker is an in-memory dockerClient for testing orchestration without Docker.
 type fakeDocker struct {
-	runFunc  func(spec *dockerx.RunSpec) (dockerx.RunResult, error)
-	execFunc func(id string, argv []string) (dockerx.RunResult, error)
-	runArgs  [][]string
-	execed   []string
-	stopped  []string
-	started  []string
+	runFunc    func(spec *dockerx.RunSpec) (dockerx.RunResult, error)
+	execFunc   func(id string, argv []string) (dockerx.RunResult, error)
+	containers []dockerx.Container
+	runArgs    [][]string
+	execed     []string
+	stopped    []string
+	started    []string
 }
 
 func (f *fakeDocker) Pull(context.Context, string) error    { return nil }
 func (f *fakeDocker) HasImage(context.Context, string) bool { return true }
 
 func (f *fakeDocker) ListLabeled(context.Context, string) ([]dockerx.Container, error) {
-	return nil, nil
+	return f.containers, nil
 }
 
 func (f *fakeDocker) Run(_ context.Context, spec *dockerx.RunSpec) (dockerx.RunResult, error) {
@@ -289,6 +290,45 @@ func backupExit(code int) func(*dockerx.RunSpec) (dockerx.RunResult, error) {
 		}
 		return dockerx.RunResult{}, nil
 	}
+}
+
+func labeledContainer() []dockerx.Container {
+	return []dockerx.Container{{
+		ID:      "c1",
+		Running: true,
+		Labels:  map[string]string{"volkeep.enable": "true"},
+		Volumes: []dockerx.Volume{{Name: "v1"}},
+	}}
+}
+
+func TestRunOnce_UnlockRunsBeforeBackups(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{containers: labeledContainer()}
+	d := newTestDaemon(fake)
+
+	d.runOnce(context.Background())
+	require.NotEmpty(t, fake.runArgs)
+	assert.Contains(t, fake.runArgs[0], "unlock", "stale locks are cleared before any worker")
+	assert.True(t, fake.ran("backup"))
+}
+
+func TestRunOnce_UnlockFailureDoesNotBlockPass(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{
+		containers: labeledContainer(),
+		runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+			if slices.Contains(spec.Args, "unlock") {
+				return dockerx.RunResult{ExitCode: 1}, nil
+			}
+			return dockerx.RunResult{}, nil
+		},
+	}
+	d := newTestDaemon(fake)
+
+	d.runOnce(context.Background())
+	assert.True(t, fake.ran("backup"), "backups still run when unlock fails")
 }
 
 func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {
