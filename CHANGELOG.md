@@ -1,6 +1,11 @@
 # Changelog
 
-## [0.1.1-alpha.0](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.1.1-alpha.0) - 2026-07-16
+## [0.2.0-alpha.1](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.1) - 2026-07-16
+
+### Features
+
+- log repo size per pass; drop `--no-cache` - ([8d72ad7](https://github.com/deadnews/volkeep/commit/8d72ad7ec2630ae75e87c2d41df67601d06cd906))
+- emit backup size fields via `--json` workers - ([f022ac4](https://github.com/deadnews/volkeep/commit/f022ac428f1feab5279fe5b312f3b4ee2c0f5b12))
 
 ### Bug fixes
 
@@ -8,6 +13,7 @@
 
 ### Refactor
 
+- drop `--retry-lock` from workers - ([32009b1](https://github.com/deadnews/volkeep/commit/32009b124e7fc2734385b36626d11a41330ab0d7))
 - normalize log messages and error strings - ([44433be](https://github.com/deadnews/volkeep/commit/44433be9f4976850853851a778f0b47e4836220b))
 
 ### Documentation
