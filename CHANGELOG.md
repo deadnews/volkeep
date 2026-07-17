@@ -1,9 +1,10 @@
 # Changelog
 
-## [0.2.0-alpha.2](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.2) - 2026-07-16
+## [0.2.0-alpha.3](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.3) - 2026-07-17
 
 ### Features
 
+- emit `stopped` flag, forget counts, and uncompressed repo size - ([6686cc2](https://github.com/deadnews/volkeep/commit/6686cc27504125c81cbfadc0295bf619aff7de1a))
 - emit pass `duration_ms` on `Backup pass finished` - ([7cd86f4](https://github.com/deadnews/volkeep/commit/7cd86f444d340db12cb2509833326590fea84cc9))
 - log repo size per pass; drop `--no-cache` - ([8d72ad7](https://github.com/deadnews/volkeep/commit/8d72ad7ec2630ae75e87c2d41df67601d06cd906))
 - emit backup size fields via `--json` workers - ([f022ac4](https://github.com/deadnews/volkeep/commit/f022ac428f1feab5279fe5b312f3b4ee2c0f5b12))
@@ -23,6 +24,7 @@
 
 ### Chores
 
+- _(prek,golangci)_ migrate to `toml` - ([ba7a771](https://github.com/deadnews/volkeep/commit/ba7a7718ef938871baf49618ae07d930a0beb8d0))
 - add `--quiet` to maintenance worker argv - ([05a98dd](https://github.com/deadnews/volkeep/commit/05a98dde9e2e813606bd2d9b1b0ae6a6bd1e0c33))
 
 ## [0.1.0](https://github.com/deadnews/volkeep/compare/v0.0.4...v0.1.0) - 2026-07-06
