@@ -80,11 +80,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if !d.applyJitter(ctx) {
 				return nil
 			}
-			d.runOnce(ctx)
+			d.runOnce(ctx, "schedule")
 		case <-d.fire:
 			t.Stop()
 			slog.Info("Manual trigger")
-			d.runOnce(ctx)
+			d.runOnce(ctx, "manual")
 		}
 	}
 }
@@ -104,7 +104,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 	}
 }
 
-func (d *Daemon) runOnce(ctx context.Context) {
+func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 	start := time.Now()
 	raw, err := d.docker.ListLabeled(ctx, label.Prefix+"enable")
 	if err != nil {
@@ -112,14 +112,16 @@ func (d *Daemon) runOnce(ctx context.Context) {
 		return
 	}
 	groups := discover(raw, d.cfg.RetentionDays)
-	slog.Info("Backup pass starting", "containers", len(groups))
+	slog.Info("Backup pass starting", "containers", len(groups), "trigger", trigger)
 	d.unlock(ctx)
 
+	volumes := 0
 	succeeded := 0
 	for i := range groups {
 		if ctx.Err() != nil {
 			return
 		}
+		volumes += len(groups[i].Volumes)
 		succeeded += d.runGroup(ctx, &groups[i])
 	}
 
@@ -133,7 +135,13 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	if ctx.Err() == nil {
 		d.stats(ctx)
 	}
-	slog.Info("Backup pass finished", "duration_ms", time.Since(start).Milliseconds())
+	slog.Info("Backup pass finished",
+		"containers", len(groups),
+		"volumes", volumes,
+		"failed", volumes-succeeded,
+		"trigger", trigger,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 }
 
 // workerSpec assembles the RunSpec shared by every restic worker.
