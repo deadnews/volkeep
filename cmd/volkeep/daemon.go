@@ -117,12 +117,15 @@ func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 
 	volumes := 0
 	succeeded := 0
+	var added uint64
 	for i := range groups {
 		if ctx.Err() != nil {
 			return
 		}
 		volumes += len(groups[i].Volumes)
-		succeeded += d.runGroup(ctx, &groups[i])
+		n, a := d.runGroup(ctx, &groups[i])
+		succeeded += n
+		added += a
 	}
 
 	if succeeded > 0 && ctx.Err() == nil {
@@ -139,6 +142,7 @@ func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 		"containers", len(groups),
 		"volumes", volumes,
 		"failed", volumes-succeeded,
+		"data_added", added,
 		"trigger", trigger,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
@@ -232,11 +236,11 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	return nil
 }
 
-// runGroup stops/restarts once per group; returns successful backup count.
+// runGroup stops/restarts once per group;
 // forget runs post-restart to minimize downtime.
-func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
+func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added uint64) {
 	if len(g.Exec) > 0 && !d.execHook(ctx, g) {
-		return 0
+		return 0, 0
 	}
 	// Pre-stopped containers must stay stopped after the pass.
 	shouldStop := g.Stop && g.Container.Running
@@ -244,14 +248,15 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 		slog.Info("Stopping container", "container", g.Container.Name)
 		if err := d.docker.Stop(ctx, g.Container.ID); err != nil {
 			slog.Error("Failed to stop container; skipping group", "container", g.Container.Name, "error", err)
-			return 0
+			return 0, 0
 		}
 	}
 
-	succeeded := make([]string, 0, len(g.Volumes))
+	done := make([]string, 0, len(g.Volumes))
 	for _, v := range g.Volumes {
-		if d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0) {
-			succeeded = append(succeeded, v.Name)
+		if ok, n := d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0); ok {
+			done = append(done, v.Name)
+			added += n
 		}
 	}
 
@@ -264,11 +269,11 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 	}
 
 	if ctx.Err() == nil {
-		for _, name := range succeeded {
+		for _, name := range done {
 			d.forget(ctx, name, g.RetentionDays)
 		}
 	}
-	return len(succeeded)
+	return len(done), added
 }
 
 // execHook runs the pre-backup command and reports whether the group can proceed.
@@ -293,7 +298,7 @@ func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	return true
 }
 
-func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool) bool {
+func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool) (ok bool, added uint64) {
 	start := time.Now()
 	res, err := d.docker.Run(ctx, d.workerSpec(
 		restic.BackupArgs(d.cfg.HostTag, volume),
@@ -314,14 +319,15 @@ func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec boo
 			"exec", exec,
 			"exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs),
 		)
-		return false
+		return false, 0
 	case res.ExitCode == restic.ExitBackupPartial:
 		attrs := append(backupAttrs(volume, dur, stopped, exec, res.Logs), "logs", restic.PlainLogs(res.Logs))
 		slog.Warn("Backup completed with unreadable files", attrs...)
 	default:
 		slog.Info("Backup finished", backupAttrs(volume, dur, stopped, exec, res.Logs)...)
 	}
-	return true
+	sum, _ := restic.ParseBackupSummary(res.Logs)
+	return true, sum.DataAdded
 }
 
 // backupAttrs returns the backup log attrs, plus summary fields when present.
