@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0-alpha.9](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.9) - 2026-07-17
+## [0.2.0-alpha.10](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.10) - 2026-07-17
 
 ### Features
 
@@ -16,10 +16,12 @@
 
 ### Bug fixes
 
+- stop spawning backup workers after cancellation - ([99d6e93](https://github.com/deadnews/volkeep/commit/99d6e935fbd0f8a233151684c351e431b5f03d7b))
 - remove stale restic locks at pass start - ([f056697](https://github.com/deadnews/volkeep/commit/f0566971999ef4220bbee51c6e90d26cd4fb96d2))
 
 ### Refactor
 
+- single-parse backup summary - ([8aa3144](https://github.com/deadnews/volkeep/commit/8aa3144c063a0b5307bcc7401a79480e3329f398))
 - drop `--retry-lock` from workers - ([32009b1](https://github.com/deadnews/volkeep/commit/32009b124e7fc2734385b36626d11a41330ab0d7))
 - normalize log messages and error strings - ([44433be](https://github.com/deadnews/volkeep/commit/44433be9f4976850853851a778f0b47e4836220b))
 
