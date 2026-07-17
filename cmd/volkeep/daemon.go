@@ -36,15 +36,10 @@ type Daemon struct {
 
 // NewDaemon constructs a Daemon.
 func NewDaemon(cfg *Config, dx dockerClient) *Daemon {
-	environ := os.Environ()
-	env := restic.BaseEnv(cfg.ResticRepo, cfg.ResticPassword)
-	env = append(env, restic.AwsEnv(environ)...)
-	env = append(env, restic.RcloneEnv(environ)...)
-
 	return &Daemon{
 		cfg:    cfg,
 		docker: dx,
-		env:    env,
+		env:    restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, os.Environ()),
 		fire:   make(chan struct{}, 1),
 	}
 }
@@ -309,46 +304,38 @@ func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec boo
 			ReadOnly: true,
 		},
 	))
-	dur := time.Since(start)
-	switch {
-	case err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial):
+	attrs := []any{
+		"volume", volume,
+		"duration_ms", time.Since(start).Milliseconds(),
+		"stopped", stopped,
+		"exec", exec,
+	}
+	if err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial) {
 		slog.Error("Backup failed",
-			"volume", volume,
-			"duration_ms", dur.Milliseconds(),
-			"stopped", stopped,
-			"exec", exec,
-			"exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs),
-		)
+			append(attrs, "exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs))...)
 		return false, 0
-	case res.ExitCode == restic.ExitBackupPartial:
-		attrs := append(backupAttrs(volume, dur, stopped, exec, res.Logs), "logs", restic.PlainLogs(res.Logs))
-		slog.Warn("Backup completed with unreadable files", attrs...)
-	default:
-		slog.Info("Backup finished", backupAttrs(volume, dur, stopped, exec, res.Logs)...)
 	}
-	sum, _ := restic.ParseBackupSummary(res.Logs)
-	return true, sum.DataAdded
-}
 
-// backupAttrs returns the backup log attrs, plus summary fields when present.
-func backupAttrs(volume string, dur time.Duration, stopped, exec bool, logs string) []any {
-	attrs := make([]any, 0, 16)
-	attrs = append(attrs,
-		"volume", volume, "duration_ms", dur.Milliseconds(), "stopped", stopped, "exec", exec)
-	sum, ok := restic.ParseBackupSummary(logs)
-	if !ok {
-		return attrs
+	sum, hasSum := restic.ParseBackupSummary(res.Logs)
+	if hasSum {
+		id := sum.SnapshotID
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		attrs = append(attrs,
+			"snapshot_id", id,
+			"data_added", sum.DataAdded,
+			"data_added_packed", sum.DataAddedPacked,
+			"bytes_processed", sum.TotalBytesProcessed,
+		)
 	}
-	id := sum.SnapshotID
-	if len(id) > 8 {
-		id = id[:8]
+	if res.ExitCode == restic.ExitBackupPartial {
+		slog.Warn("Backup completed with unreadable files",
+			append(attrs, "logs", restic.PlainLogs(res.Logs))...)
+	} else {
+		slog.Info("Backup finished", attrs...)
 	}
-	return append(attrs,
-		"snapshot_id", id,
-		"data_added", sum.DataAdded,
-		"data_added_packed", sum.DataAddedPacked,
-		"bytes_processed", sum.TotalBytesProcessed,
-	)
+	return true, sum.DataAdded
 }
 
 func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
