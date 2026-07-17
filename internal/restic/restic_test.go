@@ -39,10 +39,10 @@ func TestArgs(t *testing.T) {
 		BackupArgs("h1", "rss2tg"),
 	)
 	assert.Equal(t,
-		[]string{"forget", quiet, "--tag", "rss2tg", "--keep-daily", "3"},
+		[]string{"forget", "--tag", "rss2tg", "--keep-daily", "3", "--json", quiet},
 		ForgetArgs("rss2tg", 3),
 	)
-	assert.Equal(t, []string{"forget", quiet, "--keep-within", "30d"}, SweepArgs(30))
+	assert.Equal(t, []string{"forget", "--keep-within", "30d", "--json", quiet}, SweepArgs(30))
 	assert.Equal(t, []string{"prune", quiet}, PruneArgs())
 	assert.Equal(t, []string{"check", quiet}, CheckArgs())
 	assert.Equal(t, []string{"stats", "--mode", "raw-data", "--json"}, StatsArgs())
