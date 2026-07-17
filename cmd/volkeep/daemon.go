@@ -242,7 +242,7 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 
 	succeeded := make([]string, 0, len(g.Volumes))
 	for _, v := range g.Volumes {
-		if d.backupOne(ctx, v.Name, shouldStop) {
+		if d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0) {
 			succeeded = append(succeeded, v.Name)
 		}
 	}
@@ -285,7 +285,7 @@ func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	return true
 }
 
-func (d *Daemon) backupOne(ctx context.Context, volume string, stopped bool) bool {
+func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool) bool {
 	start := time.Now()
 	res, err := d.docker.Run(ctx, d.workerSpec(
 		restic.BackupArgs(d.cfg.HostTag, volume),
@@ -303,22 +303,24 @@ func (d *Daemon) backupOne(ctx context.Context, volume string, stopped bool) boo
 			"volume", volume,
 			"duration_ms", dur.Milliseconds(),
 			"stopped", stopped,
+			"exec", exec,
 			"exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs),
 		)
 		return false
 	case res.ExitCode == restic.ExitBackupPartial:
-		attrs := append(backupAttrs(volume, dur, stopped, res.Logs), "logs", restic.PlainLogs(res.Logs))
+		attrs := append(backupAttrs(volume, dur, stopped, exec, res.Logs), "logs", restic.PlainLogs(res.Logs))
 		slog.Warn("Backup completed with unreadable files", attrs...)
 	default:
-		slog.Info("Backup finished", backupAttrs(volume, dur, stopped, res.Logs)...)
+		slog.Info("Backup finished", backupAttrs(volume, dur, stopped, exec, res.Logs)...)
 	}
 	return true
 }
 
 // backupAttrs returns the backup log attrs, plus summary fields when present.
-func backupAttrs(volume string, dur time.Duration, stopped bool, logs string) []any {
-	attrs := make([]any, 0, 14)
-	attrs = append(attrs, "volume", volume, "duration_ms", dur.Milliseconds(), "stopped", stopped)
+func backupAttrs(volume string, dur time.Duration, stopped, exec bool, logs string) []any {
+	attrs := make([]any, 0, 16)
+	attrs = append(attrs,
+		"volume", volume, "duration_ms", dur.Milliseconds(), "stopped", stopped, "exec", exec)
 	sum, ok := restic.ParseBackupSummary(logs)
 	if !ok {
 		return attrs
@@ -343,11 +345,7 @@ func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
 		)
 		return
 	}
-	attrs := []any{"volume", volume}
-	if c, ok := restic.ParseForget(res.Logs); ok {
-		attrs = append(attrs, "kept", c.Kept, "removed", c.Removed)
-	}
-	slog.Info("Forget finished", attrs...)
+	slog.Info("Forget finished", "volume", volume)
 }
 
 // sweep forgets snapshots older than MaxAgeDays, aging out stale volumes.
@@ -370,11 +368,7 @@ func (d *Daemon) sweep(ctx context.Context, groups []Group) {
 		slog.Error("Sweep failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
 		return
 	}
-	var attrs []any
-	if c, ok := restic.ParseForget(res.Logs); ok {
-		attrs = append(attrs, "kept", c.Kept, "removed", c.Removed)
-	}
-	slog.Info("Sweep finished", attrs...)
+	slog.Info("Sweep finished")
 }
 
 // prune removes data unreferenced after forgets.

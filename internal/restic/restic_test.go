@@ -34,15 +34,17 @@ func TestArgs(t *testing.T) {
 	assert.Equal(t, []string{"init"}, InitArgs())
 	assert.Equal(t, []string{"cat", "config", "--no-lock"}, CatConfigArgs())
 	assert.Equal(t, []string{"unlock"}, UnlockArgs())
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		[]string{"backup", "/data", "--host", "h1", "--tag", "rss2tg", "--json", quiet},
 		BackupArgs("h1", "rss2tg"),
 	)
-	assert.Equal(t,
-		[]string{"forget", "--tag", "rss2tg", "--keep-daily", "3", "--json", quiet},
+	assert.Equal(
+		t,
+		[]string{"forget", "--tag", "rss2tg", "--keep-daily", "3", quiet},
 		ForgetArgs("rss2tg", 3),
 	)
-	assert.Equal(t, []string{"forget", "--keep-within", "30d", "--json", quiet}, SweepArgs(30))
+	assert.Equal(t, []string{"forget", "--keep-within", "30d", quiet}, SweepArgs(30))
 	assert.Equal(t, []string{"prune", quiet}, PruneArgs())
 	assert.Equal(t, []string{"check", quiet}, CheckArgs())
 	assert.Equal(t, []string{"stats", "--mode", "raw-data", "--json"}, StatsArgs())

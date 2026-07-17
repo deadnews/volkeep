@@ -43,26 +43,6 @@ func TestParseRepoStats(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestParseForget(t *testing.T) {
-	t.Parallel()
-
-	logs := `[{"tags":["vol1"],"host":"h1","paths":["/data"],` +
-		`"keep":[{"time":"2026-07-16T03:00:00Z","tree":"aa","id":"s1"},{"time":"2026-07-15T03:00:00Z","tree":"bb","id":"s2"}],` +
-		`"remove":[{"time":"2026-07-10T03:00:00Z","tree":"cc","id":"s3"}],` +
-		`"reasons":[{"snapshot":{},"matches":["daily snapshot"]}]}]` + "\n"
-	c, ok := ParseForget(logs)
-	require.True(t, ok)
-	assert.Equal(t, 2, c.Kept)
-	assert.Equal(t, 1, c.Removed)
-
-	none, ok := ParseForget(`[{"tags":["vol1"],"host":"h1","keep":null,"remove":null,"reasons":null}]` + "\n")
-	require.True(t, ok, "null keep/remove lists are a valid forget result")
-	assert.Equal(t, ForgetCounts{}, none)
-
-	_, ok = ParseForget("Applying Policy: keep 3 daily snapshots\nkeep 3 snapshots:\n")
-	assert.False(t, ok, "human output has no JSON groups")
-}
-
 func TestPlainLogs(t *testing.T) {
 	t.Parallel()
 

@@ -46,35 +46,6 @@ func ParseRepoStats(logs string) (RepoStats, bool) {
 	return RepoStats{}, false
 }
 
-// ForgetCounts is the snapshot tally across the groups emitted by `forget --json`.
-type ForgetCounts struct {
-	Kept    int
-	Removed int
-}
-
-// ParseForget extracts snapshot counts from forget worker output.
-func ParseForget(logs string) (ForgetCounts, bool) {
-	for line := range strings.Lines(logs) {
-		if !strings.HasPrefix(line, "[") {
-			continue
-		}
-		var groups []struct {
-			Keep   []json.RawMessage `json:"keep"`
-			Remove []json.RawMessage `json:"remove"`
-		}
-		if err := json.Unmarshal([]byte(line), &groups); err != nil {
-			continue
-		}
-		var c ForgetCounts
-		for _, g := range groups {
-			c.Kept += len(g.Keep)
-			c.Removed += len(g.Remove)
-		}
-		return c, true
-	}
-	return ForgetCounts{}, false
-}
-
 // jsonLogLine is the subset of `backup --json` message fields worth re-printing.
 type jsonLogLine struct {
 	MessageType string `json:"message_type"`

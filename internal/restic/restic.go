@@ -64,12 +64,12 @@ func BackupArgs(hostTag, tag string) []string {
 
 // ForgetArgs returns argv for forgetting snapshots scoped to a tag.
 func ForgetArgs(tag string, keepDays int) []string {
-	return []string{"forget", "--tag", tag, "--keep-daily", strconv.Itoa(keepDays), "--json", quiet}
+	return []string{"forget", "--tag", tag, "--keep-daily", strconv.Itoa(keepDays), quiet}
 }
 
 // SweepArgs returns argv for forgetting snapshots older than maxAgeDays.
 func SweepArgs(maxAgeDays int) []string {
-	return []string{"forget", "--keep-within", strconv.Itoa(maxAgeDays) + "d", "--json", quiet}
+	return []string{"forget", "--keep-within", strconv.Itoa(maxAgeDays) + "d", quiet}
 }
 
 // PruneArgs returns argv for removing data unreferenced after forgets.
