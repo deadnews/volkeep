@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0-alpha.6](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.6) - 2026-07-17
+## [0.2.0-alpha.7](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.7) - 2026-07-17
 
 ### Features
 
@@ -29,6 +29,10 @@
 
 - _(prek,golangci)_ migrate to `toml` - ([ba7a771](https://github.com/deadnews/volkeep/commit/ba7a7718ef938871baf49618ae07d930a0beb8d0))
 - add `--quiet` to maintenance worker argv - ([05a98dd](https://github.com/deadnews/volkeep/commit/05a98dde9e2e813606bd2d9b1b0ae6a6bd1e0c33))
+
+### Revert
+
+- 'feat: emit trigger=schedule|manual on events' - ([3726ffa](https://github.com/deadnews/volkeep/commit/3726ffacaa03ccd497c69ef20bf54766307efc64))
 
 ## [0.1.0](https://github.com/deadnews/volkeep/compare/v0.0.4...v0.1.0) - 2026-07-06
 
