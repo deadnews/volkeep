@@ -120,7 +120,7 @@ func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 		if ctx.Err() != nil {
 			return
 		}
-		succeeded += d.runGroup(ctx, &groups[i])
+		succeeded += d.runGroup(ctx, &groups[i], trigger)
 	}
 
 	if succeeded > 0 && ctx.Err() == nil {
@@ -226,7 +226,7 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 
 // runGroup stops/restarts once per group; returns successful backup count.
 // forget runs post-restart to minimize downtime.
-func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
+func (d *Daemon) runGroup(ctx context.Context, g *Group, trigger string) int {
 	if len(g.Exec) > 0 && !d.execHook(ctx, g) {
 		return 0
 	}
@@ -242,7 +242,7 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 
 	succeeded := make([]string, 0, len(g.Volumes))
 	for _, v := range g.Volumes {
-		if d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0) {
+		if d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0, trigger) {
 			succeeded = append(succeeded, v.Name)
 		}
 	}
@@ -285,7 +285,7 @@ func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	return true
 }
 
-func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool) bool {
+func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool, trigger string) bool {
 	start := time.Now()
 	res, err := d.docker.Run(ctx, d.workerSpec(
 		restic.BackupArgs(d.cfg.HostTag, volume),
@@ -304,23 +304,25 @@ func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec boo
 			"duration_ms", dur.Milliseconds(),
 			"stopped", stopped,
 			"exec", exec,
+			"trigger", trigger,
 			"exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs),
 		)
 		return false
 	case res.ExitCode == restic.ExitBackupPartial:
-		attrs := append(backupAttrs(volume, dur, stopped, exec, res.Logs), "logs", restic.PlainLogs(res.Logs))
+		attrs := append(backupAttrs(volume, dur, stopped, exec, trigger, res.Logs), "logs", restic.PlainLogs(res.Logs))
 		slog.Warn("Backup completed with unreadable files", attrs...)
 	default:
-		slog.Info("Backup finished", backupAttrs(volume, dur, stopped, exec, res.Logs)...)
+		slog.Info("Backup finished", backupAttrs(volume, dur, stopped, exec, trigger, res.Logs)...)
 	}
 	return true
 }
 
 // backupAttrs returns the backup log attrs, plus summary fields when present.
-func backupAttrs(volume string, dur time.Duration, stopped, exec bool, logs string) []any {
-	attrs := make([]any, 0, 16)
+func backupAttrs(volume string, dur time.Duration, stopped, exec bool, trigger, logs string) []any {
+	attrs := make([]any, 0, 18)
 	attrs = append(attrs,
-		"volume", volume, "duration_ms", dur.Milliseconds(), "stopped", stopped, "exec", exec)
+		"volume", volume, "duration_ms", dur.Milliseconds(),
+		"stopped", stopped, "exec", exec, "trigger", trigger)
 	sum, ok := restic.ParseBackupSummary(logs)
 	if !ok {
 		return attrs

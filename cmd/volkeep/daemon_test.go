@@ -176,7 +176,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 		}
 	}()
 
-	d.runGroup(passCtx, group)
+	d.runGroup(passCtx, group, "manual")
 
 	require.Eventually(t, func() bool {
 		state, err := app.State(ctx)
@@ -348,7 +348,7 @@ func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
 
-	assert.Equal(t, 1, d.runGroup(context.Background(), group), "partial backup counts as success")
+	assert.Equal(t, 1, d.runGroup(context.Background(), group, "manual"), "partial backup counts as success")
 	assert.True(t, fake.ran("forget"), "retention runs after a partial backup")
 }
 
@@ -359,7 +359,7 @@ func TestRunGroup_FailedBackupSkipsRetention(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
 
-	assert.Equal(t, 0, d.runGroup(context.Background(), group), "failed backup is not counted")
+	assert.Equal(t, 0, d.runGroup(context.Background(), group, "manual"), "failed backup is not counted")
 	assert.False(t, fake.ran("forget"), "no retention for a failed backup")
 }
 
@@ -376,7 +376,7 @@ func TestRunGroup_SkipsForgetOnCancel(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
 
-	assert.Equal(t, 1, d.runGroup(ctx, group), "the backup itself succeeded")
+	assert.Equal(t, 1, d.runGroup(ctx, group, "manual"), "the backup itself succeeded")
 	assert.False(t, fake.ran("forget"), "retention is deferred on shutdown")
 }
 
@@ -393,7 +393,7 @@ func TestRunGroup_RestartsStoppedContainerOnCancel(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Name: "app", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}, Stop: true}
 
-	d.runGroup(ctx, group)
+	d.runGroup(ctx, group, "manual")
 	assert.Equal(t, []string{"c1"}, fake.stopped)
 	assert.Equal(t, []string{"c1"}, fake.started, "a container the daemon stopped is restarted despite cancel")
 }
@@ -405,7 +405,7 @@ func TestRunGroup_PreStoppedStaysDown(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: false}, Volumes: []dockerx.Volume{{Name: "v1"}}, Stop: true}
 
-	d.runGroup(context.Background(), group)
+	d.runGroup(context.Background(), group, "manual")
 	assert.Empty(t, fake.stopped, "an already-stopped container is not stopped")
 	assert.Empty(t, fake.started, "an already-stopped container is not restarted")
 }
@@ -454,7 +454,7 @@ func TestRunGroup_ExecRunsOncePerGroup(t *testing.T) {
 		Exec:      []string{"pg_dump"},
 	}
 
-	assert.Equal(t, 2, d.runGroup(context.Background(), group))
+	assert.Equal(t, 2, d.runGroup(context.Background(), group, "manual"))
 	assert.Equal(t, []string{"c1"}, fake.execed, "exec runs once for the whole group")
 	assert.True(t, fake.ran("backup"))
 }
@@ -473,7 +473,7 @@ func TestRunGroup_ExecFailureSkipsGroup(t *testing.T) {
 		Stop:      true,
 	}
 
-	assert.Equal(t, 0, d.runGroup(context.Background(), group))
+	assert.Equal(t, 0, d.runGroup(context.Background(), group, "manual"))
 	assert.False(t, fake.ran("backup"), "a failed dump is never snapshotted")
 	assert.Empty(t, fake.stopped, "exec gates the group before any stop")
 }
@@ -489,7 +489,7 @@ func TestRunGroup_ExecNotRunningSkipsGroup(t *testing.T) {
 		Exec:      []string{"pg_dump"},
 	}
 
-	assert.Equal(t, 0, d.runGroup(context.Background(), group))
+	assert.Equal(t, 0, d.runGroup(context.Background(), group, "manual"))
 	assert.Empty(t, fake.execed, "no exec attempt on a stopped container")
 	assert.False(t, fake.ran("backup"), "a stale dump is never snapshotted")
 }
