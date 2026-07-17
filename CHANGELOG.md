@@ -1,9 +1,10 @@
 # Changelog
 
-## [0.2.0-alpha.7](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.7) - 2026-07-17
+## [0.2.0-alpha.8](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.8) - 2026-07-17
 
 ### Features
 
+- emit trigger=schedule|manual on events - ([f0984d4](https://github.com/deadnews/volkeep/commit/f0984d4234aa25f887bc44ec75d41bcb94d8978c))
 - emit `trigger=schedule|manual` on events - ([d7c6cba](https://github.com/deadnews/volkeep/commit/d7c6cba0401e5cf86f666081a195e870e51a4a27))
 - emit `trigger=schedule|manual` on pass events - ([91ef7d1](https://github.com/deadnews/volkeep/commit/91ef7d163e26fe235cdb2811d9080d68d49a1b7f))
 - emit `exec` flag; drop forget `--json` parsing - ([e619881](https://github.com/deadnews/volkeep/commit/e619881f89c15aec8a28e66b98983bc3cf96ee69))
