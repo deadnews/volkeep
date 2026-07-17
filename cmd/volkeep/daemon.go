@@ -249,6 +249,9 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added u
 
 	done := make([]string, 0, len(g.Volumes))
 	for _, v := range g.Volumes {
+		if ctx.Err() != nil {
+			break
+		}
 		if ok, n := d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0); ok {
 			done = append(done, v.Name)
 			added += n

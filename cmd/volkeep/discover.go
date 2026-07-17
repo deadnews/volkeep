@@ -44,6 +44,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 			}
 		}
 		if len(kept) == 0 {
+			slog.Info("Skipping container: no volumes to back up", "container", c.Name)
 			continue
 		}
 		retention := defaultRetention

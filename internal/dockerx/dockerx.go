@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -209,6 +210,9 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	case err := <-errCh:
 		return RunResult{ExitCode: -1, Logs: logs}, errors.Join(fmt.Errorf("wait worker: %w", err), logErr)
 	case s := <-statusCh:
+		if logErr != nil {
+			slog.Warn("Failed to collect worker logs", "error", logErr)
+		}
 		return RunResult{ExitCode: int(s.StatusCode), Logs: logs}, nil
 	case <-ctx.Done():
 		return RunResult{ExitCode: -1, Logs: logs}, fmt.Errorf("wait worker: %w", ctx.Err())

@@ -383,6 +383,33 @@ func TestRunGroup_SkipsForgetOnCancel(t *testing.T) {
 	assert.False(t, fake.ran("forget"), "retention is deferred on shutdown")
 }
 
+func TestRunGroup_CancelSkipsRemainingVolumes(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	fake := &fakeDocker{runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+		if slices.Contains(spec.Args, "backup") {
+			cancel() // SIGTERM lands during the first volume's backup
+		}
+		return dockerx.RunResult{}, nil
+	}}
+	d := newTestDaemon(fake)
+	group := &Group{
+		Container: dockerx.Container{ID: "c1", Running: true},
+		Volumes:   []dockerx.Volume{{Name: "v1"}, {Name: "v2"}},
+	}
+
+	n, _ := d.runGroup(ctx, group)
+	assert.Equal(t, 1, n, "the in-flight backup still counts")
+	backups := 0
+	for _, args := range fake.runArgs {
+		if slices.Contains(args, "backup") {
+			backups++
+		}
+	}
+	assert.Equal(t, 1, backups, "no worker is spawned for the remaining volume")
+}
+
 func TestRunGroup_RestartsStoppedContainerOnCancel(t *testing.T) {
 	t.Parallel()
 
