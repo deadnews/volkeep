@@ -94,7 +94,7 @@ func TestDaemon_RunOnce(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_runonce", "snapshot for our volume should be listed")
@@ -128,7 +128,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 		return err == nil && !state.Running
 	}, 10*time.Second, 100*time.Millisecond)
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	state, err := app.State(ctx)
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestDaemon_MultiVolume(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_mv_v1")
@@ -232,7 +232,7 @@ func TestDaemon_ExecDump(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_exec_dump", "the dump volume is snapshotted")
@@ -317,7 +317,7 @@ func TestRunOnce_UnlockRunsBeforeBackups(t *testing.T) {
 	fake := &fakeDocker{containers: labeledContainer()}
 	d := newTestDaemon(fake)
 
-	d.runOnce(context.Background())
+	d.runOnce(context.Background(), "manual")
 	require.NotEmpty(t, fake.runArgs)
 	assert.Contains(t, fake.runArgs[0], "unlock", "stale locks are cleared before any worker")
 	assert.True(t, fake.ran("backup"))
@@ -337,7 +337,7 @@ func TestRunOnce_UnlockFailureDoesNotBlockPass(t *testing.T) {
 	}
 	d := newTestDaemon(fake)
 
-	d.runOnce(context.Background())
+	d.runOnce(context.Background(), "manual")
 	assert.True(t, fake.ran("backup"), "backups still run when unlock fails")
 }
 
