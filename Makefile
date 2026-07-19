@@ -15,7 +15,7 @@ up:
 	go mod tidy
 	go mod verify
 up-ci:
-	prek update --freeze
+	prek update
 	pinact run --update
 	pindock run --update Dockerfile
 

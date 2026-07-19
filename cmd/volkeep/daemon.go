@@ -36,15 +36,10 @@ type Daemon struct {
 
 // NewDaemon constructs a Daemon.
 func NewDaemon(cfg *Config, dx dockerClient) *Daemon {
-	environ := os.Environ()
-	env := restic.BaseEnv(cfg.ResticRepo, cfg.ResticPassword)
-	env = append(env, restic.AwsEnv(environ)...)
-	env = append(env, restic.RcloneEnv(environ)...)
-
 	return &Daemon{
 		cfg:    cfg,
 		docker: dx,
-		env:    env,
+		env:    restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, os.Environ()),
 		fire:   make(chan struct{}, 1),
 	}
 }
@@ -63,7 +58,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		if !d.docker.HasImage(ctx, d.cfg.ResticImage) {
 			return fmt.Errorf("pull restic image: %w", err)
 		}
-		slog.Warn("Pull failed; using local image", "image", d.cfg.ResticImage, "error", err)
+		slog.Warn("Failed to pull image; using local", "image", d.cfg.ResticImage, "error", err)
 	}
 	if err := d.initRepo(ctx); err != nil {
 		return err
@@ -80,11 +75,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if !d.applyJitter(ctx) {
 				return nil
 			}
-			d.runOnce(ctx)
+			d.runOnce(ctx, "schedule")
 		case <-d.fire:
 			t.Stop()
 			slog.Info("Manual trigger")
-			d.runOnce(ctx)
+			d.runOnce(ctx, "manual")
 		}
 	}
 }
@@ -95,7 +90,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 		return true
 	}
 	delay := time.Duration(rand.Int64N(int64(d.cfg.Jitter))) //nolint:gosec // jitter is non-security
-	slog.Info("Jitter delay", "for", delay)
+	slog.Info("Jitter delay", "duration", delay)
 	select {
 	case <-ctx.Done():
 		return false
@@ -104,21 +99,28 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 	}
 }
 
-func (d *Daemon) runOnce(ctx context.Context) {
+func (d *Daemon) runOnce(ctx context.Context, trigger string) {
+	start := time.Now()
 	raw, err := d.docker.ListLabeled(ctx, label.Prefix+"enable")
 	if err != nil {
-		slog.Error("Discovery failed", "error", err)
+		slog.Error("Failed to discover containers", "error", err)
 		return
 	}
 	groups := discover(raw, d.cfg.RetentionDays)
-	slog.Info("Backup pass starting", "containers", len(groups))
+	slog.Info("Backup pass starting", "containers", len(groups), "trigger", trigger)
+	d.unlock(ctx)
 
+	volumes := 0
 	succeeded := 0
+	var added uint64
 	for i := range groups {
 		if ctx.Err() != nil {
 			return
 		}
-		succeeded += d.runGroup(ctx, &groups[i])
+		volumes += len(groups[i].Volumes)
+		n, a := d.runGroup(ctx, &groups[i])
+		succeeded += n
+		added += a
 	}
 
 	if succeeded > 0 && ctx.Err() == nil {
@@ -128,7 +130,17 @@ func (d *Daemon) runOnce(ctx context.Context) {
 	if d.cfg.Check && ctx.Err() == nil {
 		d.check(ctx)
 	}
-	slog.Info("Backup pass finished")
+	if ctx.Err() == nil {
+		d.stats(ctx)
+	}
+	slog.Info("Backup pass finished",
+		"containers", len(groups),
+		"volumes", volumes,
+		"failed", volumes-succeeded,
+		"data_added", added,
+		"trigger", trigger,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 }
 
 // workerSpec assembles the RunSpec shared by every restic worker.
@@ -142,14 +154,48 @@ func (d *Daemon) workerSpec(args []string, mounts ...mount.Mount) *dockerx.RunSp
 	}
 }
 
+// unlock removes locks stranded by workers that died uncleanly. Safe alongside
+// a live operation: its lock refreshes every ~5 min and never turns stale.
+func (d *Daemon) unlock(ctx context.Context) {
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.UnlockArgs()))
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Unlock failed",
+			"exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	if res.Logs != "" {
+		slog.Warn("Removed stale repository locks", "logs", res.Logs)
+	}
+}
+
 // check verifies repo integrity.
 func (d *Daemon) check(ctx context.Context) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.CheckArgs()))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Repository check failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Repository check failed",
+			"exit", res.ExitCode, "error", err, "logs", res.Logs)
 		return
 	}
 	slog.Info("Repository check passed")
+}
+
+// stats logs the repository's on-disk size once per pass.
+func (d *Daemon) stats(ctx context.Context) {
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.StatsArgs()))
+	if err != nil || res.ExitCode != 0 {
+		slog.Error("Stats failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		return
+	}
+	stats, ok := restic.ParseRepoStats(res.Logs)
+	if !ok {
+		slog.Error("Failed to parse stats output", "logs", res.Logs)
+		return
+	}
+	slog.Info("Repository stats",
+		"total_size", stats.TotalSize,
+		"total_uncompressed_size", stats.TotalUncompressedSize,
+		"snapshots", stats.SnapshotsCount,
+	)
 }
 
 func (d *Daemon) repoMount() []mount.Mount {
@@ -185,26 +231,30 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	return nil
 }
 
-// runGroup stops/restarts once per group; returns successful backup count.
+// runGroup stops/restarts once per group;
 // forget runs post-restart to minimize downtime.
-func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
+func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added uint64) {
 	if len(g.Exec) > 0 && !d.execHook(ctx, g) {
-		return 0
+		return 0, 0
 	}
 	// Pre-stopped containers must stay stopped after the pass.
 	shouldStop := g.Stop && g.Container.Running
 	if shouldStop {
 		slog.Info("Stopping container", "container", g.Container.Name)
 		if err := d.docker.Stop(ctx, g.Container.ID); err != nil {
-			slog.Error("Stop failed; skipping group", "container", g.Container.Name, "error", err)
-			return 0
+			slog.Error("Failed to stop container; skipping group", "container", g.Container.Name, "error", err)
+			return 0, 0
 		}
 	}
 
-	succeeded := make([]string, 0, len(g.Volumes))
+	done := make([]string, 0, len(g.Volumes))
 	for _, v := range g.Volumes {
-		if d.backupOne(ctx, v.Name) {
-			succeeded = append(succeeded, v.Name)
+		if ctx.Err() != nil {
+			break
+		}
+		if ok, n := d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0); ok {
+			done = append(done, v.Name)
+			added += n
 		}
 	}
 
@@ -212,16 +262,16 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) int {
 		// Restart even on shutdown, or a SIGTERM mid-pass strands the container.
 		startCtx := context.WithoutCancel(ctx)
 		if err := d.docker.Start(startCtx, g.Container.ID); err != nil {
-			slog.Error("Restart failed", "container", g.Container.Name, "error", err)
+			slog.Error("Failed to restart container", "container", g.Container.Name, "error", err)
 		}
 	}
 
 	if ctx.Err() == nil {
-		for _, name := range succeeded {
+		for _, name := range done {
 			d.forget(ctx, name, g.RetentionDays)
 		}
 	}
-	return len(succeeded)
+	return len(done), added
 }
 
 // execHook runs the pre-backup command and reports whether the group can proceed.
@@ -246,7 +296,7 @@ func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	return true
 }
 
-func (d *Daemon) backupOne(ctx context.Context, volume string) bool {
+func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool) (ok bool, added uint64) {
 	start := time.Now()
 	res, err := d.docker.Run(ctx, d.workerSpec(
 		restic.BackupArgs(d.cfg.HostTag, volume),
@@ -257,28 +307,38 @@ func (d *Daemon) backupOne(ctx context.Context, volume string) bool {
 			ReadOnly: true,
 		},
 	))
-	dur := time.Since(start)
-	switch {
-	case err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial):
+	attrs := []any{
+		"volume", volume,
+		"duration_ms", time.Since(start).Milliseconds(),
+		"stopped", stopped,
+		"exec", exec,
+	}
+	if err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial) {
 		slog.Error("Backup failed",
-			"volume", volume,
-			"duration_ms", dur.Milliseconds(),
-			"exit", res.ExitCode, "error", err, "logs", res.Logs,
-		)
-		return false
-	case res.ExitCode == restic.ExitBackupPartial:
-		slog.Warn("Backup completed with unreadable files",
-			"volume", volume,
-			"duration_ms", dur.Milliseconds(),
-			"logs", res.Logs,
-		)
-	default:
-		slog.Info("Backup finished",
-			"volume", volume,
-			"duration_ms", dur.Milliseconds(),
+			append(attrs, "exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs))...)
+		return false, 0
+	}
+
+	sum, hasSum := restic.ParseBackupSummary(res.Logs)
+	if hasSum {
+		id := sum.SnapshotID
+		if len(id) > 8 {
+			id = id[:8]
+		}
+		attrs = append(attrs,
+			"snapshot_id", id,
+			"data_added", sum.DataAdded,
+			"data_added_packed", sum.DataAddedPacked,
+			"bytes_processed", sum.TotalBytesProcessed,
 		)
 	}
-	return true
+	if res.ExitCode == restic.ExitBackupPartial {
+		slog.Warn("Backup completed with unreadable files",
+			append(attrs, "logs", restic.PlainLogs(res.Logs))...)
+	} else {
+		slog.Info("Backup finished", attrs...)
+	}
+	return true, sum.DataAdded
 }
 
 func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {

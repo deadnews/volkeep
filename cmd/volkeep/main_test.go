@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRun_FailsOnMissingConfig: a missing required env var must error before any Docker call.
 func TestRun_FailsOnMissingConfig(t *testing.T) {
 	for _, k := range []string{
 		"VOLKEEP_SCHEDULE", "RESTIC_PASSWORD", "RESTIC_REPOSITORY",

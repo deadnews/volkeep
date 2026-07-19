@@ -25,7 +25,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 	for _, c := range containers {
 		spec, enabled, err := label.Parse(c.Labels)
 		if err != nil {
-			slog.Error("Skipping container: invalid labels", "container", c.Name, "error", err)
+			slog.Error("Failed to parse labels; skipping container", "container", c.Name, "error", err)
 			continue
 		}
 		if !enabled {
@@ -33,7 +33,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 		}
 		vols, err := pickVolumes(c, spec.Volumes)
 		if err != nil {
-			slog.Error("Skipping container: volume error", "container", c.Name, "error", err)
+			slog.Error("Failed to resolve volumes; skipping container", "container", c.Name, "error", err)
 			continue
 		}
 		var kept []dockerx.Volume
@@ -44,6 +44,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 			}
 		}
 		if len(kept) == 0 {
+			slog.Info("Skipping container: no volumes to back up", "container", c.Name)
 			continue
 		}
 		retention := defaultRetention
@@ -73,7 +74,7 @@ func pickVolumes(c dockerx.Container, wanted []string) ([]dockerx.Volume, error)
 	for _, name := range wanted {
 		v, ok := have[name]
 		if !ok {
-			return nil, fmt.Errorf("volkeep.volumes references %q which is not mounted as a named volume", name)
+			return nil, fmt.Errorf("label %svolumes references %q which is not mounted as a named volume", label.Prefix, name)
 		}
 		out = append(out, v)
 	}

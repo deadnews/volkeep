@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
@@ -69,9 +71,24 @@ func snapshots(ctx context.Context, t *testing.T, d *Daemon) string {
 	return res.Logs
 }
 
+func waitDiscoverable(ctx context.Context, t *testing.T, dx *dockerx.Client, id string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		containers, err := dx.ListLabeled(ctx, "volkeep.enable")
+		return err == nil && slices.ContainsFunc(containers, func(c dockerx.Container) bool {
+			return c.ID == id
+		})
+	}, 10*time.Second, 100*time.Millisecond, "started container must show up in the daemon's listing")
+}
+
 func TestDaemon_RunOnce(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
+
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo hello > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -85,12 +102,15 @@ func TestDaemon_RunOnce(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_runonce", "snapshot for our volume should be listed")
+	assert.Contains(t, logBuf.String(), "snapshot_id=", "backup summary fields are emitted")
+	assert.Contains(t, logBuf.String(), "data_added=", "backup summary fields are emitted")
+	assert.Contains(t, logBuf.String(), "total_size=", "repository stats are emitted")
 }
 
 func TestDaemon_PreStoppedStaysDown(t *testing.T) {
@@ -108,7 +128,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
 	require.NoError(t, dx.Stop(ctx, app.GetContainerID()))
 	// Stop can return before the daemon's container listing reflects it;
@@ -118,7 +138,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 		return err == nil && !state.Running
 	}, 10*time.Second, 100*time.Millisecond)
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	state, err := app.State(ctx)
 	require.NoError(t, err)
@@ -127,7 +147,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 
 func TestDaemon_RestartsOnShutdown(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo hi > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -140,7 +160,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
 	group := &Group{
 		Container: dockerx.Container{ID: app.GetContainerID(), Name: "app", Running: true},
@@ -176,7 +196,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 
 func TestDaemon_MultiVolume(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo a > /data1/a; echo b > /data2/b; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -192,9 +212,9 @@ func TestDaemon_MultiVolume(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_mv_v1")
@@ -203,7 +223,7 @@ func TestDaemon_MultiVolume(t *testing.T) {
 
 func TestDaemon_ExecDump(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo secret > /src/db; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -220,9 +240,13 @@ func TestDaemon_ExecDump(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
+	require.Eventually(t, func() bool {
+		code, _, err := app.Exec(ctx, []string{"test", "-f", "/src/db"})
+		return err == nil && code == 0
+	}, 10*time.Second, 100*time.Millisecond, "dump source must exist before the pass")
 
-	d.runOnce(ctx)
+	d.runOnce(ctx, "manual")
 
 	logs := snapshots(ctx, t, d)
 	assert.Contains(t, logs, "volkeep_test_exec_dump", "the dump volume is snapshotted")
@@ -231,19 +255,20 @@ func TestDaemon_ExecDump(t *testing.T) {
 
 // fakeDocker is an in-memory dockerClient for testing orchestration without Docker.
 type fakeDocker struct {
-	runFunc  func(spec *dockerx.RunSpec) (dockerx.RunResult, error)
-	execFunc func(id string, argv []string) (dockerx.RunResult, error)
-	runArgs  [][]string
-	execed   []string
-	stopped  []string
-	started  []string
+	runFunc    func(spec *dockerx.RunSpec) (dockerx.RunResult, error)
+	execFunc   func(id string, argv []string) (dockerx.RunResult, error)
+	containers []dockerx.Container
+	runArgs    [][]string
+	execed     []string
+	stopped    []string
+	started    []string
 }
 
 func (f *fakeDocker) Pull(context.Context, string) error    { return nil }
 func (f *fakeDocker) HasImage(context.Context, string) bool { return true }
 
 func (f *fakeDocker) ListLabeled(context.Context, string) ([]dockerx.Container, error) {
-	return nil, nil
+	return f.containers, nil
 }
 
 func (f *fakeDocker) Run(_ context.Context, spec *dockerx.RunSpec) (dockerx.RunResult, error) {
@@ -291,6 +316,45 @@ func backupExit(code int) func(*dockerx.RunSpec) (dockerx.RunResult, error) {
 	}
 }
 
+func labeledContainer() []dockerx.Container {
+	return []dockerx.Container{{
+		ID:      "c1",
+		Running: true,
+		Labels:  map[string]string{"volkeep.enable": "true"},
+		Volumes: []dockerx.Volume{{Name: "v1"}},
+	}}
+}
+
+func TestRunOnce_UnlockRunsBeforeBackups(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{containers: labeledContainer()}
+	d := newTestDaemon(fake)
+
+	d.runOnce(context.Background(), "manual")
+	require.NotEmpty(t, fake.runArgs)
+	assert.Contains(t, fake.runArgs[0], "unlock", "stale locks are cleared before any worker")
+	assert.True(t, fake.ran("backup"))
+}
+
+func TestRunOnce_UnlockFailureDoesNotBlockPass(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeDocker{
+		containers: labeledContainer(),
+		runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+			if slices.Contains(spec.Args, "unlock") {
+				return dockerx.RunResult{ExitCode: 1}, nil
+			}
+			return dockerx.RunResult{}, nil
+		},
+	}
+	d := newTestDaemon(fake)
+
+	d.runOnce(context.Background(), "manual")
+	assert.True(t, fake.ran("backup"), "backups still run when unlock fails")
+}
+
 func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {
 	t.Parallel()
 
@@ -298,7 +362,8 @@ func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
 
-	assert.Equal(t, 1, d.runGroup(context.Background(), group), "partial backup counts as success")
+	n, _ := d.runGroup(context.Background(), group)
+	assert.Equal(t, 1, n, "partial backup counts as success")
 	assert.True(t, fake.ran("forget"), "retention runs after a partial backup")
 }
 
@@ -309,7 +374,8 @@ func TestRunGroup_FailedBackupSkipsRetention(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
 
-	assert.Equal(t, 0, d.runGroup(context.Background(), group), "failed backup is not counted")
+	n, _ := d.runGroup(context.Background(), group)
+	assert.Equal(t, 0, n, "failed backup is not counted")
 	assert.False(t, fake.ran("forget"), "no retention for a failed backup")
 }
 
@@ -326,8 +392,36 @@ func TestRunGroup_SkipsForgetOnCancel(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
 
-	assert.Equal(t, 1, d.runGroup(ctx, group), "the backup itself succeeded")
+	n, _ := d.runGroup(ctx, group)
+	assert.Equal(t, 1, n, "the backup itself succeeded")
 	assert.False(t, fake.ran("forget"), "retention is deferred on shutdown")
+}
+
+func TestRunGroup_CancelSkipsRemainingVolumes(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	fake := &fakeDocker{runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+		if slices.Contains(spec.Args, "backup") {
+			cancel() // SIGTERM lands during the first volume's backup
+		}
+		return dockerx.RunResult{}, nil
+	}}
+	d := newTestDaemon(fake)
+	group := &Group{
+		Container: dockerx.Container{ID: "c1", Running: true},
+		Volumes:   []dockerx.Volume{{Name: "v1"}, {Name: "v2"}},
+	}
+
+	n, _ := d.runGroup(ctx, group)
+	assert.Equal(t, 1, n, "the in-flight backup still counts")
+	backups := 0
+	for _, args := range fake.runArgs {
+		if slices.Contains(args, "backup") {
+			backups++
+		}
+	}
+	assert.Equal(t, 1, backups, "no worker is spawned for the remaining volume")
 }
 
 func TestRunGroup_RestartsStoppedContainerOnCancel(t *testing.T) {
@@ -404,7 +498,8 @@ func TestRunGroup_ExecRunsOncePerGroup(t *testing.T) {
 		Exec:      []string{"pg_dump"},
 	}
 
-	assert.Equal(t, 2, d.runGroup(context.Background(), group))
+	n, _ := d.runGroup(context.Background(), group)
+	assert.Equal(t, 2, n)
 	assert.Equal(t, []string{"c1"}, fake.execed, "exec runs once for the whole group")
 	assert.True(t, fake.ran("backup"))
 }
@@ -423,7 +518,8 @@ func TestRunGroup_ExecFailureSkipsGroup(t *testing.T) {
 		Stop:      true,
 	}
 
-	assert.Equal(t, 0, d.runGroup(context.Background(), group))
+	n, _ := d.runGroup(context.Background(), group)
+	assert.Equal(t, 0, n)
 	assert.False(t, fake.ran("backup"), "a failed dump is never snapshotted")
 	assert.Empty(t, fake.stopped, "exec gates the group before any stop")
 }
@@ -439,7 +535,8 @@ func TestRunGroup_ExecNotRunningSkipsGroup(t *testing.T) {
 		Exec:      []string{"pg_dump"},
 	}
 
-	assert.Equal(t, 0, d.runGroup(context.Background(), group))
+	n, _ := d.runGroup(context.Background(), group)
+	assert.Equal(t, 0, n)
 	assert.Empty(t, fake.execed, "no exec attempt on a stopped container")
 	assert.False(t, fake.ran("backup"), "a stale dump is never snapshotted")
 }

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ type Client struct{ api *client.Client }
 func New() (*Client, error) {
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("docker client: %w", err)
+		return nil, fmt.Errorf("new client: %w", err)
 	}
 	return &Client{api: c}, nil
 }
@@ -36,7 +37,7 @@ func New() (*Client, error) {
 // Close releases the underlying HTTP client.
 func (c *Client) Close() error {
 	if err := c.api.Close(); err != nil {
-		return fmt.Errorf("docker client close: %w", err)
+		return fmt.Errorf("close client: %w", err)
 	}
 	return nil
 }
@@ -209,6 +210,9 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	case err := <-errCh:
 		return RunResult{ExitCode: -1, Logs: logs}, errors.Join(fmt.Errorf("wait worker: %w", err), logErr)
 	case s := <-statusCh:
+		if logErr != nil {
+			slog.Warn("Failed to collect worker logs", "error", logErr)
+		}
 		return RunResult{ExitCode: int(s.StatusCode), Logs: logs}, nil
 	case <-ctx.Done():
 		return RunResult{ExitCode: -1, Logs: logs}, fmt.Errorf("wait worker: %w", ctx.Err())
