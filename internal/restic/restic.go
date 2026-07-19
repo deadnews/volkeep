@@ -13,15 +13,21 @@ const (
 	ExitRepoMissing = 10
 )
 
-// WorkerEnv returns the env forwarded to every worker:
-// repo credentials plus the AWS_* and RCLONE_* entries from environ.
+// WorkerEnv returns the env forwarded to every worker: the resolved repo
+// credentials plus the RESTIC_*, AWS_*, and RCLONE_* entries from environ.
 func WorkerEnv(repository, password string, environ []string) []string {
 	env := []string{
 		"RESTIC_REPOSITORY=" + repository,
 		"RESTIC_PASSWORD=" + password,
 	}
 	for _, kv := range environ {
-		if strings.HasPrefix(kv, "AWS_") || strings.HasPrefix(kv, "RCLONE_") {
+		if strings.HasPrefix(kv, "RESTIC_REPOSITORY=") ||
+			strings.HasPrefix(kv, "RESTIC_PASSWORD=") {
+			continue
+		}
+		if strings.HasPrefix(kv, "RESTIC_") ||
+			strings.HasPrefix(kv, "AWS_") ||
+			strings.HasPrefix(kv, "RCLONE_") {
 			env = append(env, kv)
 		}
 	}
