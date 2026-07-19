@@ -11,8 +11,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-// TestRunDemuxesLogs guards against raw multiplexed frame headers leaking
-// into Logs; demuxed text carries no NUL bytes.
 func TestRunDemuxesLogs(t *testing.T) {
 	if os.Getenv("TESTCONTAINERS") != "1" {
 		t.Skip("Skipping integration test, set TESTCONTAINERS=1 to run it.")
@@ -36,7 +34,7 @@ func TestRunDemuxesLogs(t *testing.T) {
 	assert.Equal(t, 0, res.ExitCode)
 	assert.Contains(t, res.Logs, "out")
 	assert.Contains(t, res.Logs, "err")
-	assert.NotContains(t, res.Logs, "\x00")
+	assert.NotContains(t, res.Logs, "\x00", "multiplexed frame headers must not leak into logs")
 }
 
 func TestExec(t *testing.T) {

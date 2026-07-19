@@ -74,7 +74,7 @@ func pickVolumes(c dockerx.Container, wanted []string) ([]dockerx.Volume, error)
 	for _, name := range wanted {
 		v, ok := have[name]
 		if !ok {
-			return nil, fmt.Errorf("volkeep.volumes references %q which is not mounted as a named volume", name)
+			return nil, fmt.Errorf("label %svolumes references %q which is not mounted as a named volume", label.Prefix, name)
 		}
 		out = append(out, v)
 	}

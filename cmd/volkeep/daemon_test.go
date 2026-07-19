@@ -71,9 +71,19 @@ func snapshots(ctx context.Context, t *testing.T, d *Daemon) string {
 	return res.Logs
 }
 
+func waitDiscoverable(ctx context.Context, t *testing.T, dx *dockerx.Client, id string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		containers, err := dx.ListLabeled(ctx, "volkeep.enable")
+		return err == nil && slices.ContainsFunc(containers, func(c dockerx.Container) bool {
+			return c.ID == id
+		})
+	}, 10*time.Second, 100*time.Millisecond, "started container must show up in the daemon's listing")
+}
+
 func TestDaemon_RunOnce(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	var logBuf bytes.Buffer
 	prev := slog.Default()
@@ -92,7 +102,7 @@ func TestDaemon_RunOnce(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
 	d.runOnce(ctx, "manual")
 
@@ -118,7 +128,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
 	require.NoError(t, dx.Stop(ctx, app.GetContainerID()))
 	// Stop can return before the daemon's container listing reflects it;
@@ -137,7 +147,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 
 func TestDaemon_RestartsOnShutdown(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo hi > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -150,7 +160,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
 	group := &Group{
 		Container: dockerx.Container{ID: app.GetContainerID(), Name: "app", Running: true},
@@ -186,7 +196,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 
 func TestDaemon_MultiVolume(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo a > /data1/a; echo b > /data2/b; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -202,7 +212,7 @@ func TestDaemon_MultiVolume(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
 
 	d.runOnce(ctx, "manual")
 
@@ -213,7 +223,7 @@ func TestDaemon_MultiVolume(t *testing.T) {
 
 func TestDaemon_ExecDump(t *testing.T) {
 	SkipIfNoTestcontainers(t)
-	ctx, _, d := setupDaemon(t)
+	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo secret > /src/db; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -230,7 +240,11 @@ func TestDaemon_ExecDump(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = testcontainers.TerminateContainer(app) })
 
-	time.Sleep(500 * time.Millisecond)
+	waitDiscoverable(ctx, t, dx, app.GetContainerID())
+	require.Eventually(t, func() bool {
+		code, _, err := app.Exec(ctx, []string{"test", "-f", "/src/db"})
+		return err == nil && code == 0
+	}, 10*time.Second, 100*time.Millisecond, "dump source must exist before the pass")
 
 	d.runOnce(ctx, "manual")
 

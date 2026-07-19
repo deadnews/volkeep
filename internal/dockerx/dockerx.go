@@ -29,7 +29,7 @@ type Client struct{ api *client.Client }
 func New() (*Client, error) {
 	c, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return nil, fmt.Errorf("docker client: %w", err)
+		return nil, fmt.Errorf("new client: %w", err)
 	}
 	return &Client{api: c}, nil
 }
@@ -37,7 +37,7 @@ func New() (*Client, error) {
 // Close releases the underlying HTTP client.
 func (c *Client) Close() error {
 	if err := c.api.Close(); err != nil {
-		return fmt.Errorf("docker client close: %w", err)
+		return fmt.Errorf("close client: %w", err)
 	}
 	return nil
 }
