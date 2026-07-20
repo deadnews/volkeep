@@ -54,6 +54,7 @@ The daemon runs `restic` in a short-lived worker container named `volkeep-worker
 | `VOLKEEP_HOST`           | required        | Identifier for `restic snapshots --host` |
 | `RESTIC_REPOSITORY`      | required        | Restic URI, or `volume:<name>` (local)   |
 | `RESTIC_PASSWORD`        | required        | Restic repo password                     |
+| `RESTIC_*`               | —               | Forwarded to workers (tuning)            |
 | `AWS_*`                  | —               | Forwarded to workers (S3 backends)       |
 | `RCLONE_*`               | —               | Forwarded to workers (rclone backends)   |
 | `VOLKEEP_RETENTION_DAYS` | `5`             | Daily snapshots to keep                  |

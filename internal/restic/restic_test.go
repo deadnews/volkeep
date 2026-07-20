@@ -9,13 +9,22 @@ import (
 func TestWorkerEnv(t *testing.T) {
 	t.Parallel()
 
-	environ := []string{"PATH=/bin", "AWS_ACCESS_KEY_ID=id", "HOME=/root", "RCLONE_CONFIG_R_TYPE=s3"}
+	environ := []string{
+		"PATH=/bin",
+		"AWS_ACCESS_KEY_ID=id",
+		"HOME=/root",
+		"RCLONE_CONFIG_R_TYPE=s3",
+		"RESTIC_COMPRESSION=max",
+		"RESTIC_REPOSITORY=volume:stale",
+		"RESTIC_PASSWORD=stale",
+	}
 	assert.Equal(t, []string{
 		"RESTIC_REPOSITORY=s3:h/b",
 		"RESTIC_PASSWORD=pw",
 		"AWS_ACCESS_KEY_ID=id",
 		"RCLONE_CONFIG_R_TYPE=s3",
-	}, WorkerEnv("s3:h/b", "pw", environ))
+		"RESTIC_COMPRESSION=max",
+	}, WorkerEnv("s3:h/b", "pw", environ), "resolved credentials supersede the daemon's copies")
 
 	assert.Equal(t, []string{
 		"RESTIC_REPOSITORY=/repo",
