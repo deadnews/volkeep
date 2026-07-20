@@ -97,7 +97,7 @@ linters = ["govet"]
 
 [[linters.exclusions.rules]]
 path    = "_test\\.go"
-linters = ["errchkjson", "gocognit", "godoclint", "gosec"]
+linters = ["errchkjson", "gocognit", "godoclint", "gosec", "lll"]
 
 [formatters]
 enable = ["gofumpt", "goimports"]
