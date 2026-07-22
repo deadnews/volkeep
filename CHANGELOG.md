@@ -1,42 +1,14 @@
 # Changelog
 
-## [0.2.0-alpha.10](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0-alpha.10) - 2026-07-17
+## [0.2.0](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0) - 2026-07-22
 
 ### Features
 
-- log `data_added` bytes per backup run - ([83db853](https://github.com/deadnews/volkeep/commit/83db8531c84157264b1c78ec8017902ed049abda))
-- emit trigger=schedule|manual on events - ([f0984d4](https://github.com/deadnews/volkeep/commit/f0984d4234aa25f887bc44ec75d41bcb94d8978c))
-- emit `trigger=schedule|manual` on events - ([d7c6cba](https://github.com/deadnews/volkeep/commit/d7c6cba0401e5cf86f666081a195e870e51a4a27))
-- emit `trigger=schedule|manual` on pass events - ([91ef7d1](https://github.com/deadnews/volkeep/commit/91ef7d163e26fe235cdb2811d9080d68d49a1b7f))
-- emit `exec` flag; drop forget `--json` parsing - ([e619881](https://github.com/deadnews/volkeep/commit/e619881f89c15aec8a28e66b98983bc3cf96ee69))
-- emit `stopped` flag, forget counts, and uncompressed repo size - ([6686cc2](https://github.com/deadnews/volkeep/commit/6686cc27504125c81cbfadc0295bf619aff7de1a))
-- emit pass `duration_ms` on `Backup pass finished` - ([7cd86f4](https://github.com/deadnews/volkeep/commit/7cd86f444d340db12cb2509833326590fea84cc9))
-- log repo size per pass; drop `--no-cache` - ([8d72ad7](https://github.com/deadnews/volkeep/commit/8d72ad7ec2630ae75e87c2d41df67601d06cd906))
-- emit backup size fields via `--json` workers - ([f022ac4](https://github.com/deadnews/volkeep/commit/f022ac428f1feab5279fe5b312f3b4ee2c0f5b12))
+- forward `RESTIC_*` env to workers ([#10](https://github.com/deadnews/volkeep/issues/10)) - ([65476cb](https://github.com/deadnews/volkeep/commit/65476cbee42bd8b268c3e2e038486c8e9c24aa7b))
 
 ### Bug fixes
 
-- stop spawning backup workers after cancellation - ([99d6e93](https://github.com/deadnews/volkeep/commit/99d6e935fbd0f8a233151684c351e431b5f03d7b))
-- remove stale restic locks at pass start - ([f056697](https://github.com/deadnews/volkeep/commit/f0566971999ef4220bbee51c6e90d26cd4fb96d2))
-
-### Refactor
-
-- single-parse backup summary - ([8aa3144](https://github.com/deadnews/volkeep/commit/8aa3144c063a0b5307bcc7401a79480e3329f398))
-- drop `--retry-lock` from workers - ([32009b1](https://github.com/deadnews/volkeep/commit/32009b124e7fc2734385b36626d11a41330ab0d7))
-- normalize log messages and error strings - ([44433be](https://github.com/deadnews/volkeep/commit/44433be9f4976850853851a778f0b47e4836220b))
-
-### Documentation
-
-- _(readme)_ update - ([2dc407b](https://github.com/deadnews/volkeep/commit/2dc407bb349164c13a1865e9229c1e017d3cd5aa))
-
-### Chores
-
-- _(prek,golangci)_ migrate to `toml` - ([ba7a771](https://github.com/deadnews/volkeep/commit/ba7a7718ef938871baf49618ae07d930a0beb8d0))
-- add `--quiet` to maintenance worker argv - ([05a98dd](https://github.com/deadnews/volkeep/commit/05a98dde9e2e813606bd2d9b1b0ae6a6bd1e0c33))
-
-### Revert
-
-- 'feat: emit trigger=schedule|manual on events' - ([3726ffa](https://github.com/deadnews/volkeep/commit/3726ffacaa03ccd497c69ef20bf54766307efc64))
+- self-healing repo locks, structured backup metrics ([#9](https://github.com/deadnews/volkeep/issues/9)) - ([0d7356e](https://github.com/deadnews/volkeep/commit/0d7356e9f3ad7f88174739107ba13dcd0d2d3d8c))
 
 ## [0.1.0](https://github.com/deadnews/volkeep/compare/v0.0.4...v0.1.0) - 2026-07-06
 
