@@ -484,7 +484,11 @@ func TestRunGroup_RestartsStoppedContainerOnCancel(t *testing.T) {
 		return dockerx.RunResult{}, nil
 	}}
 	d := newTestDaemon(fake)
-	group := &Group{Container: dockerx.Container{ID: "c1", Name: "app", Running: true}, Volumes: []string{"v1"}, Stop: true}
+	group := &Group{
+		Container: dockerx.Container{ID: "c1", Name: "app", Running: true},
+		Volumes:   []string{"v1"},
+		Stop:      true,
+	}
 
 	d.runGroup(ctx, group)
 	assert.Equal(t, []string{"c1"}, fake.stopped)

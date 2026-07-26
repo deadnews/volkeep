@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/deadnews/volkeep/internal/dockerx"
@@ -67,8 +69,16 @@ func TestDiscover_SharedVolume(t *testing.T) {
 	t.Parallel()
 
 	containers := []dockerx.Container{
-		{Name: "a", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared"}},
-		{Name: "b", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared", "b_data"}},
+		{
+			Name:    "a",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"shared"},
+		},
+		{
+			Name:    "b",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"shared", "b_data"},
+		},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 2)
@@ -76,12 +86,73 @@ func TestDiscover_SharedVolume(t *testing.T) {
 	assert.Equal(t, []string{"b_data"}, got[1].Volumes, "shared volume backed up once")
 }
 
+func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	containers := []dockerx.Container{
+		{
+			Name:    "app",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"pgdump", "app_data"},
+		},
+		{
+			Name: "postgres",
+			Labels: map[string]string{
+				"volkeep.enable":   "true",
+				"volkeep.volumes":  "pgdump",
+				"volkeep.exec-pre": "pg_dump -f /dump/db.dump app",
+			},
+			Volumes: []string{"pgdata", "pgdump"},
+		},
+	}
+	got := discover(containers, 7)
+
+	require.Len(t, got, 1)
+	assert.Empty(t, got[0].Exec, "the plain container won the volume, so no dump runs")
+	assert.Contains(t, logBuf.String(), "Shared volume backed up without this container's exec and stop")
+	assert.Contains(t, logBuf.String(), "claimed_by=app")
+}
+
+func TestDiscover_SharedVolumeWithoutExecIsQuiet(t *testing.T) {
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	containers := []dockerx.Container{
+		{
+			Name:    "a",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"shared"},
+		},
+		{
+			Name:    "b",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"shared", "b_data"},
+		},
+	}
+	discover(containers, 7)
+
+	assert.NotContains(t, logBuf.String(), "level=WARN", "plain sharing is the documented behaviour")
+}
+
 func TestDiscover_AllVolumesShared(t *testing.T) {
 	t.Parallel()
 
 	containers := []dockerx.Container{
-		{Name: "a", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared"}},
-		{Name: "b", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared"}},
+		{
+			Name:    "a",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"shared"},
+		},
+		{
+			Name:    "b",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"shared"},
+		},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 1, "a container left with no volumes yields no group")

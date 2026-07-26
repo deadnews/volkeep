@@ -22,7 +22,7 @@ type Group struct {
 // discover resolves labeled containers into backup groups, skipping invalid ones.
 func discover(containers []dockerx.Container, defaultRetention int) []Group {
 	out := make([]Group, 0, len(containers))
-	seen := make(map[string]bool) // a shared volume is backed up once
+	claimed := make(map[string]string)
 	for _, c := range containers {
 		spec, err := label.Parse(c.Labels)
 		if err != nil {
@@ -36,10 +36,14 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 		}
 		kept := make([]string, 0, len(vols))
 		for _, name := range vols {
-			if !seen[name] {
-				seen[name] = true
-				kept = append(kept, name)
+			if owner, dup := claimed[name]; dup {
+				if len(spec.Exec) > 0 || spec.Stop {
+					slog.Warn("Shared volume backed up without this container's exec and stop", "volume", name, "container", c.Name, "claimed_by", owner)
+				}
+				continue
 			}
+			claimed[name] = c.Name
+			kept = append(kept, name)
 		}
 		if len(kept) == 0 {
 			slog.Info("Skipping container: no volumes to back up", "container", c.Name)
