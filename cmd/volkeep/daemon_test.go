@@ -316,19 +316,19 @@ func backupExit(code int) func(*dockerx.RunSpec) (dockerx.RunResult, error) {
 	}
 }
 
-func labeledContainer() []dockerx.Container {
+func labeledContainer(volumes ...string) []dockerx.Container {
 	return []dockerx.Container{{
 		ID:      "c1",
 		Running: true,
 		Labels:  map[string]string{"volkeep.enable": "true"},
-		Volumes: []string{"v1"},
+		Volumes: volumes,
 	}}
 }
 
 func TestRunOnce_UnlockRunsBeforeBackups(t *testing.T) {
 	t.Parallel()
 
-	fake := &fakeDocker{containers: labeledContainer()}
+	fake := &fakeDocker{containers: labeledContainer("v1")}
 	d := newTestDaemon(fake)
 
 	d.runOnce(context.Background(), "manual")
@@ -341,7 +341,7 @@ func TestRunOnce_UnlockFailureDoesNotBlockPass(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeDocker{
-		containers: labeledContainer(),
+		containers: labeledContainer("v1"),
 		runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
 			if slices.Contains(spec.Args, "unlock") {
 				return dockerx.RunResult{ExitCode: 1}, nil
@@ -353,6 +353,55 @@ func TestRunOnce_UnlockFailureDoesNotBlockPass(t *testing.T) {
 
 	d.runOnce(context.Background(), "manual")
 	assert.True(t, fake.ran("backup"), "backups still run when unlock fails")
+}
+
+func TestRunOnce_CancelReportsSucceededNotFailed(t *testing.T) {
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	fake := &fakeDocker{
+		containers: labeledContainer("v1", "v2"),
+		runFunc: func(spec *dockerx.RunSpec) (dockerx.RunResult, error) {
+			if slices.Contains(spec.Args, "backup") {
+				cancel() // SIGTERM lands during the first volume's backup
+			}
+			return dockerx.RunResult{}, nil
+		},
+	}
+	d := newTestDaemon(fake)
+
+	d.runOnce(ctx, "manual")
+
+	logs := logBuf.String()
+	assert.Contains(t, logs, "Backup pass interrupted")
+	assert.Contains(t, logs, "succeeded=1")
+	assert.NotContains(t, logs, "Backup pass finished")
+	assert.NotContains(t, logs, "failed=", "v2 was never attempted, so it is not a failure")
+}
+
+func TestBackupOne_UnparsableSummaryWarns(t *testing.T) {
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	fake := &fakeDocker{runFunc: func(*dockerx.RunSpec) (dockerx.RunResult, error) {
+		return dockerx.RunResult{Logs: `{"message_type":"snapshot"}` + "\n"}, nil
+	}}
+	d := newTestDaemon(fake)
+	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []string{"v1"}}
+
+	ok, added := d.backupOne(context.Background(), group, "v1", false)
+
+	assert.True(t, ok, "an unreadable summary does not fail the backup")
+	assert.Zero(t, added)
+	assert.Contains(t, logBuf.String(), "Failed to parse backup summary")
+	assert.Contains(t, logBuf.String(), "Backup finished")
 }
 
 func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {

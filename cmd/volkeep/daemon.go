@@ -115,15 +115,25 @@ func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 	var added uint64
 	for i := range groups {
 		if ctx.Err() != nil {
-			return
+			break
 		}
 		volumes += len(groups[i].Volumes)
 		n, a := d.runGroup(ctx, &groups[i])
 		succeeded += n
 		added += a
 	}
+	// Volumes the cancel skipped were never attempted, so they cannot be reported failed.
+	if ctx.Err() != nil {
+		slog.Warn("Backup pass interrupted",
+			"succeeded", succeeded,
+			"data_added", added,
+			"trigger", trigger,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+		return
+	}
 
-	if succeeded > 0 && ctx.Err() == nil {
+	if succeeded > 0 {
 		d.sweep(ctx, groups)
 		d.prune(ctx)
 	}
@@ -327,6 +337,8 @@ func (d *Daemon) backupOne(ctx context.Context, g *Group, volume string, stopped
 			"data_added_packed", sum.DataAddedPacked,
 			"bytes_processed", sum.TotalBytesProcessed,
 		)
+	} else {
+		slog.Warn("Failed to parse backup summary", "volume", volume, "logs", res.Logs)
 	}
 	if res.ExitCode == restic.ExitBackupPartial {
 		slog.Warn("Backup completed with unreadable files",
