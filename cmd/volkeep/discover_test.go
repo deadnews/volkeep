@@ -20,7 +20,7 @@ func TestDiscover_SinglePerContainer(t *testing.T) {
 				"volkeep.stop":           "true",
 				"volkeep.retention-days": "3",
 			},
-			Volumes: []dockerx.Volume{{Name: "rss2tg_data", Destination: "/data"}},
+			Volumes: []string{"rss2tg_data"},
 		},
 	}
 	got := discover(containers, 7)
@@ -34,20 +34,15 @@ func TestDiscover_MultiVolume(t *testing.T) {
 
 	containers := []dockerx.Container{
 		{
-			ID:     "abc",
-			Name:   "app",
-			Labels: map[string]string{"volkeep.enable": "true"},
-			Volumes: []dockerx.Volume{
-				{Name: "app_data", Destination: "/data"},
-				{Name: "app_cache", Destination: "/cache"},
-			},
+			ID:      "abc",
+			Name:    "app",
+			Labels:  map[string]string{"volkeep.enable": "true"},
+			Volumes: []string{"app_data", "app_cache"},
 		},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 1)
-	require.Len(t, got[0].Volumes, 2, "one group holds both volumes")
-	assert.Equal(t, "app_data", got[0].Volumes[0].Name)
-	assert.Equal(t, "app_cache", got[0].Volumes[1].Name)
+	assert.Equal(t, []string{"app_data", "app_cache"}, got[0].Volumes, "one group holds both volumes")
 }
 
 func TestDiscover_VolumesWhitelist(t *testing.T) {
@@ -60,45 +55,33 @@ func TestDiscover_VolumesWhitelist(t *testing.T) {
 				"volkeep.enable":  "true",
 				"volkeep.volumes": "app_data",
 			},
-			Volumes: []dockerx.Volume{
-				{Name: "app_data", Destination: "/data"},
-				{Name: "app_cache", Destination: "/cache"},
-			},
+			Volumes: []string{"app_data", "app_cache"},
 		},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 1)
-	require.Len(t, got[0].Volumes, 1)
-	assert.Equal(t, "app_data", got[0].Volumes[0].Name)
+	assert.Equal(t, []string{"app_data"}, got[0].Volumes)
 }
 
 func TestDiscover_SharedVolume(t *testing.T) {
 	t.Parallel()
 
 	containers := []dockerx.Container{
-		{Name: "a", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []dockerx.Volume{{Name: "shared"}}},
-		{
-			Name:   "b",
-			Labels: map[string]string{"volkeep.enable": "true"},
-			Volumes: []dockerx.Volume{
-				{Name: "shared"},
-				{Name: "b_data"},
-			},
-		},
+		{Name: "a", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared"}},
+		{Name: "b", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared", "b_data"}},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 2)
 	assert.Equal(t, "a", got[0].Container.Name, "first owner wins the shared volume")
-	require.Len(t, got[1].Volumes, 1, "shared volume backed up once")
-	assert.Equal(t, "b_data", got[1].Volumes[0].Name)
+	assert.Equal(t, []string{"b_data"}, got[1].Volumes, "shared volume backed up once")
 }
 
 func TestDiscover_AllVolumesShared(t *testing.T) {
 	t.Parallel()
 
 	containers := []dockerx.Container{
-		{Name: "a", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []dockerx.Volume{{Name: "shared"}}},
-		{Name: "b", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []dockerx.Volume{{Name: "shared"}}},
+		{Name: "a", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared"}},
+		{Name: "b", Labels: map[string]string{"volkeep.enable": "true"}, Volumes: []string{"shared"}},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 1, "a container left with no volumes yields no group")
@@ -115,7 +98,7 @@ func TestDiscover_MissingVolume(t *testing.T) {
 				"volkeep.enable":  "true",
 				"volkeep.volumes": "missing",
 			},
-			Volumes: []dockerx.Volume{{Name: "other"}},
+			Volumes: []string{"other"},
 		},
 	}
 	assert.Empty(t, discover(containers, 7), "misconfigured container is skipped, not fatal")
@@ -132,16 +115,12 @@ func TestDiscover_Exec(t *testing.T) {
 				"volkeep.exec-pre": "pg_dump -Fc -f /dump/db.dump app",
 				"volkeep.volumes":  "app_dump",
 			},
-			Volumes: []dockerx.Volume{
-				{Name: "app_data", Destination: "/var/lib/postgresql"},
-				{Name: "app_dump", Destination: "/dump"},
-			},
+			Volumes: []string{"app_data", "app_dump"},
 		},
 	}
 	got := discover(containers, 7)
 	require.Len(t, got, 1)
-	require.Len(t, got[0].Volumes, 1)
-	assert.Equal(t, "app_dump", got[0].Volumes[0].Name)
+	assert.Equal(t, []string{"app_dump"}, got[0].Volumes)
 	assert.Equal(t, []string{"pg_dump", "-Fc", "-f", "/dump/db.dump", "app"}, got[0].Exec)
 }
 
@@ -155,7 +134,7 @@ func TestDiscover_ExecWithoutVolumes(t *testing.T) {
 				"volkeep.enable":   "true",
 				"volkeep.exec-pre": "pg_dump -Fc -f /dump/db.dump app",
 			},
-			Volumes: []dockerx.Volume{{Name: "app_data"}},
+			Volumes: []string{"app_data"},
 		},
 	}
 	assert.Empty(t, discover(containers, 7), "exec without an explicit whitelist is skipped, not fatal")

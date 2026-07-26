@@ -11,10 +11,15 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 )
 
-func TestRunDemuxesLogs(t *testing.T) {
+func skipIfNoTestcontainers(t *testing.T) {
+	t.Helper()
 	if os.Getenv("TESTCONTAINERS") != "1" {
 		t.Skip("Skipping integration test, set TESTCONTAINERS=1 to run it.")
 	}
+}
+
+func TestRunDemuxesLogs(t *testing.T) {
+	skipIfNoTestcontainers(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -38,9 +43,7 @@ func TestRunDemuxesLogs(t *testing.T) {
 }
 
 func TestExec(t *testing.T) {
-	if os.Getenv("TESTCONTAINERS") != "1" {
-		t.Skip("Skipping integration test, set TESTCONTAINERS=1 to run it.")
-	}
+	skipIfNoTestcontainers(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

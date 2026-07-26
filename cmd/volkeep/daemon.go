@@ -248,12 +248,12 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added u
 	}
 
 	done := make([]string, 0, len(g.Volumes))
-	for _, v := range g.Volumes {
+	for _, volume := range g.Volumes {
 		if ctx.Err() != nil {
 			break
 		}
-		if ok, n := d.backupOne(ctx, v.Name, shouldStop, len(g.Exec) > 0); ok {
-			done = append(done, v.Name)
+		if ok, n := d.backupOne(ctx, g, volume, shouldStop); ok {
+			done = append(done, volume)
 			added += n
 		}
 	}
@@ -296,7 +296,7 @@ func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	return true
 }
 
-func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec bool) (ok bool, added uint64) {
+func (d *Daemon) backupOne(ctx context.Context, g *Group, volume string, stopped bool) (ok bool, added uint64) {
 	start := time.Now()
 	res, err := d.docker.Run(ctx, d.workerSpec(
 		restic.BackupArgs(d.cfg.HostTag, volume),
@@ -311,7 +311,7 @@ func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec boo
 		"volume", volume,
 		"duration_ms", time.Since(start).Milliseconds(),
 		"stopped", stopped,
-		"exec", exec,
+		"exec", len(g.Exec) > 0,
 	}
 	if err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial) {
 		slog.Error("Backup failed",
@@ -321,12 +321,8 @@ func (d *Daemon) backupOne(ctx context.Context, volume string, stopped, exec boo
 
 	sum, hasSum := restic.ParseBackupSummary(res.Logs)
 	if hasSum {
-		id := sum.SnapshotID
-		if len(id) > 8 {
-			id = id[:8]
-		}
 		attrs = append(attrs,
-			"snapshot_id", id,
+			"snapshot_id", sum.SnapshotID[:min(len(sum.SnapshotID), 8)],
 			"data_added", sum.DataAdded,
 			"data_added_packed", sum.DataAddedPacked,
 			"bytes_processed", sum.TotalBytesProcessed,

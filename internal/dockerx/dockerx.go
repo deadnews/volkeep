@@ -43,18 +43,13 @@ func (c *Client) Close() error {
 }
 
 // Container is the slice of container state volkeep cares about.
+// Volumes holds named-volume mounts; bind and anonymous volumes are excluded.
 type Container struct {
 	ID      string
 	Name    string
 	Running bool
 	Labels  map[string]string
-	Volumes []Volume
-}
-
-// Volume is a named-volume mount on a container; bind mounts are excluded.
-type Volume struct {
-	Name        string
-	Destination string
+	Volumes []string
 }
 
 // ListLabeled returns all containers carrying labelKey=true.
@@ -72,11 +67,11 @@ func (c *Client) ListLabeled(ctx context.Context, labelKey string) ([]Container,
 		if len(r.Names) > 0 {
 			name = strings.TrimPrefix(r.Names[0], "/")
 		}
-		vols := make([]Volume, 0, len(r.Mounts))
+		vols := make([]string, 0, len(r.Mounts))
 		for j := range r.Mounts {
 			m := &r.Mounts[j]
 			if m.Type == mount.TypeVolume && m.Name != "" && !isAnonVolume(m.Name) {
-				vols = append(vols, Volume{Name: m.Name, Destination: m.Destination})
+				vols = append(vols, m.Name)
 			}
 		}
 		out = append(out, Container{

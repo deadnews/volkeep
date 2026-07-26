@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/deadnews/volkeep/internal/dockerx"
 	"github.com/deadnews/volkeep/internal/label"
@@ -12,7 +13,7 @@ import (
 // exec and stop that wrap them.
 type Group struct {
 	Container     dockerx.Container
-	Volumes       []dockerx.Volume
+	Volumes       []string
 	Exec          []string
 	RetentionDays int
 	Stop          bool
@@ -36,11 +37,11 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 			slog.Error("Failed to resolve volumes; skipping container", "container", c.Name, "error", err)
 			continue
 		}
-		var kept []dockerx.Volume
-		for _, v := range vols {
-			if !seen[v.Name] {
-				seen[v.Name] = true
-				kept = append(kept, v)
+		kept := make([]string, 0, len(vols))
+		for _, name := range vols {
+			if !seen[name] {
+				seen[name] = true
+				kept = append(kept, name)
 			}
 		}
 		if len(kept) == 0 {
@@ -62,21 +63,14 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 	return out
 }
 
-func pickVolumes(c dockerx.Container, wanted []string) ([]dockerx.Volume, error) {
+func pickVolumes(c dockerx.Container, wanted []string) ([]string, error) {
 	if len(wanted) == 0 {
 		return c.Volumes, nil
 	}
-	have := make(map[string]dockerx.Volume, len(c.Volumes))
-	for _, v := range c.Volumes {
-		have[v.Name] = v
-	}
-	out := make([]dockerx.Volume, 0, len(wanted))
 	for _, name := range wanted {
-		v, ok := have[name]
-		if !ok {
+		if !slices.Contains(c.Volumes, name) {
 			return nil, fmt.Errorf("label %svolumes references %q which is not mounted as a named volume", label.Prefix, name)
 		}
-		out = append(out, v)
 	}
-	return out, nil
+	return wanted, nil
 }

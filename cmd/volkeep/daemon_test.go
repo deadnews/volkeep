@@ -19,7 +19,7 @@ import (
 	"github.com/deadnews/volkeep/internal/restic"
 )
 
-func SkipIfNoTestcontainers(t *testing.T) {
+func skipIfNoTestcontainers(t *testing.T) {
 	t.Helper()
 	if os.Getenv("TESTCONTAINERS") != "1" {
 		t.Skip("Skipping integration test, set TESTCONTAINERS=1 to run it.")
@@ -82,7 +82,7 @@ func waitDiscoverable(ctx context.Context, t *testing.T, dx *dockerx.Client, id 
 }
 
 func TestDaemon_RunOnce(t *testing.T) {
-	SkipIfNoTestcontainers(t)
+	skipIfNoTestcontainers(t)
 	ctx, dx, d := setupDaemon(t)
 
 	var logBuf bytes.Buffer
@@ -114,7 +114,7 @@ func TestDaemon_RunOnce(t *testing.T) {
 }
 
 func TestDaemon_PreStoppedStaysDown(t *testing.T) {
-	SkipIfNoTestcontainers(t)
+	skipIfNoTestcontainers(t)
 	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
@@ -146,7 +146,7 @@ func TestDaemon_PreStoppedStaysDown(t *testing.T) {
 }
 
 func TestDaemon_RestartsOnShutdown(t *testing.T) {
-	SkipIfNoTestcontainers(t)
+	skipIfNoTestcontainers(t)
 	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
@@ -164,7 +164,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 
 	group := &Group{
 		Container: dockerx.Container{ID: app.GetContainerID(), Name: "app", Running: true},
-		Volumes:   []dockerx.Volume{{Name: "volkeep_test_restart"}},
+		Volumes:   []string{"volkeep_test_restart"},
 		Stop:      true,
 	}
 
@@ -195,7 +195,7 @@ func TestDaemon_RestartsOnShutdown(t *testing.T) {
 }
 
 func TestDaemon_MultiVolume(t *testing.T) {
-	SkipIfNoTestcontainers(t)
+	skipIfNoTestcontainers(t)
 	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
@@ -222,7 +222,7 @@ func TestDaemon_MultiVolume(t *testing.T) {
 }
 
 func TestDaemon_ExecDump(t *testing.T) {
-	SkipIfNoTestcontainers(t)
+	skipIfNoTestcontainers(t)
 	ctx, dx, d := setupDaemon(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
@@ -321,7 +321,7 @@ func labeledContainer() []dockerx.Container {
 		ID:      "c1",
 		Running: true,
 		Labels:  map[string]string{"volkeep.enable": "true"},
-		Volumes: []dockerx.Volume{{Name: "v1"}},
+		Volumes: []string{"v1"},
 	}}
 }
 
@@ -360,7 +360,7 @@ func TestRunGroup_PartialBackupAppliesRetention(t *testing.T) {
 
 	fake := &fakeDocker{runFunc: backupExit(restic.ExitBackupPartial)}
 	d := newTestDaemon(fake)
-	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
+	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []string{"v1"}}
 
 	n, _ := d.runGroup(context.Background(), group)
 	assert.Equal(t, 1, n, "partial backup counts as success")
@@ -372,7 +372,7 @@ func TestRunGroup_FailedBackupSkipsRetention(t *testing.T) {
 
 	fake := &fakeDocker{runFunc: backupExit(1)}
 	d := newTestDaemon(fake)
-	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
+	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []string{"v1"}}
 
 	n, _ := d.runGroup(context.Background(), group)
 	assert.Equal(t, 0, n, "failed backup is not counted")
@@ -390,7 +390,7 @@ func TestRunGroup_SkipsForgetOnCancel(t *testing.T) {
 		return dockerx.RunResult{}, nil
 	}}
 	d := newTestDaemon(fake)
-	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}}
+	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []string{"v1"}}
 
 	n, _ := d.runGroup(ctx, group)
 	assert.Equal(t, 1, n, "the backup itself succeeded")
@@ -410,7 +410,7 @@ func TestRunGroup_CancelSkipsRemainingVolumes(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{
 		Container: dockerx.Container{ID: "c1", Running: true},
-		Volumes:   []dockerx.Volume{{Name: "v1"}, {Name: "v2"}},
+		Volumes:   []string{"v1", "v2"},
 	}
 
 	n, _ := d.runGroup(ctx, group)
@@ -435,7 +435,7 @@ func TestRunGroup_RestartsStoppedContainerOnCancel(t *testing.T) {
 		return dockerx.RunResult{}, nil
 	}}
 	d := newTestDaemon(fake)
-	group := &Group{Container: dockerx.Container{ID: "c1", Name: "app", Running: true}, Volumes: []dockerx.Volume{{Name: "v1"}}, Stop: true}
+	group := &Group{Container: dockerx.Container{ID: "c1", Name: "app", Running: true}, Volumes: []string{"v1"}, Stop: true}
 
 	d.runGroup(ctx, group)
 	assert.Equal(t, []string{"c1"}, fake.stopped)
@@ -447,7 +447,7 @@ func TestRunGroup_PreStoppedStaysDown(t *testing.T) {
 
 	fake := &fakeDocker{}
 	d := newTestDaemon(fake)
-	group := &Group{Container: dockerx.Container{ID: "c1", Running: false}, Volumes: []dockerx.Volume{{Name: "v1"}}, Stop: true}
+	group := &Group{Container: dockerx.Container{ID: "c1", Running: false}, Volumes: []string{"v1"}, Stop: true}
 
 	d.runGroup(context.Background(), group)
 	assert.Empty(t, fake.stopped, "an already-stopped container is not stopped")
@@ -468,7 +468,8 @@ func TestSweep_Runs(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeDocker{}
-	d := &Daemon{cfg: &Config{RetentionDays: 5, MaxAgeDays: 30}, docker: fake}
+	d := newTestDaemon(fake)
+	d.cfg.MaxAgeDays = 30
 
 	d.sweep(context.Background(), []Group{{RetentionDays: 5}})
 	assert.True(t, fake.ran("--keep-within"))
@@ -478,7 +479,8 @@ func TestSweep_SkipsWhenRetentionReachesMaxAge(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeDocker{}
-	d := &Daemon{cfg: &Config{RetentionDays: 5, MaxAgeDays: 30}, docker: fake}
+	d := newTestDaemon(fake)
+	d.cfg.MaxAgeDays = 30
 
 	d.sweep(context.Background(), []Group{
 		{RetentionDays: 5},
@@ -494,7 +496,7 @@ func TestRunGroup_ExecRunsOncePerGroup(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{
 		Container: dockerx.Container{ID: "c1", Running: true},
-		Volumes:   []dockerx.Volume{{Name: "v1"}, {Name: "v2"}},
+		Volumes:   []string{"v1", "v2"},
 		Exec:      []string{"pg_dump"},
 	}
 
@@ -513,7 +515,7 @@ func TestRunGroup_ExecFailureSkipsGroup(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{
 		Container: dockerx.Container{ID: "c1", Running: true},
-		Volumes:   []dockerx.Volume{{Name: "v1"}},
+		Volumes:   []string{"v1"},
 		Exec:      []string{"pg_dump"},
 		Stop:      true,
 	}
@@ -531,7 +533,7 @@ func TestRunGroup_ExecNotRunningSkipsGroup(t *testing.T) {
 	d := newTestDaemon(fake)
 	group := &Group{
 		Container: dockerx.Container{ID: "c1", Running: false},
-		Volumes:   []dockerx.Volume{{Name: "v1"}},
+		Volumes:   []string{"v1"},
 		Exec:      []string{"pg_dump"},
 	}
 
