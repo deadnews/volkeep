@@ -24,12 +24,9 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 	out := make([]Group, 0, len(containers))
 	seen := make(map[string]bool) // a shared volume is backed up once
 	for _, c := range containers {
-		spec, enabled, err := label.Parse(c.Labels)
+		spec, err := label.Parse(c.Labels)
 		if err != nil {
 			slog.Error("Failed to parse labels; skipping container", "container", c.Name, "error", err)
-			continue
-		}
-		if !enabled {
 			continue
 		}
 		vols, err := pickVolumes(c, spec.Volumes)
@@ -69,7 +66,7 @@ func pickVolumes(c dockerx.Container, wanted []string) ([]string, error) {
 	}
 	for _, name := range wanted {
 		if !slices.Contains(c.Volumes, name) {
-			return nil, fmt.Errorf("label %svolumes references %q which is not mounted as a named volume", label.Prefix, name)
+			return nil, fmt.Errorf("label %s references %q which is not mounted as a named volume", label.VolumesKey, name)
 		}
 	}
 	return wanted, nil

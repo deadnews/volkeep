@@ -101,7 +101,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 
 func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 	start := time.Now()
-	raw, err := d.docker.ListLabeled(ctx, label.Prefix+"enable")
+	raw, err := d.docker.ListLabeled(ctx, label.EnableKey)
 	if err != nil {
 		slog.Error("Failed to discover containers", "error", err)
 		return

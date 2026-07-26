@@ -7,8 +7,14 @@ import (
 	"strings"
 )
 
-// Prefix is the namespace shared by every label volkeep reads.
-const Prefix = "volkeep."
+// The labels volkeep reads. A container opts in with EnableKey set to "true".
+const (
+	EnableKey        = "volkeep.enable"
+	VolumesKey       = "volkeep.volumes"
+	ExecPreKey       = "volkeep.exec-pre"
+	StopKey          = "volkeep.stop"
+	RetentionDaysKey = "volkeep.retention-days"
+)
 
 // Spec is the per-container backup configuration parsed from labels.
 // Empty Volumes and zero RetentionDays mean "use the default".
@@ -19,15 +25,11 @@ type Spec struct {
 	RetentionDays int
 }
 
-// Parse returns the spec; enabled is false unless volkeep.enable="true".
-func Parse(labels map[string]string) (Spec, bool, error) {
-	if labels[Prefix+"enable"] != "true" {
-		return Spec{}, false, nil
-	}
-
+// Parse returns the backup spec a container's labels describe.
+func Parse(labels map[string]string) (Spec, error) {
 	var s Spec
 
-	if v := labels[Prefix+"volumes"]; v != "" {
+	if v := labels[VolumesKey]; v != "" {
 		for name := range strings.SplitSeq(v, ",") {
 			if name = strings.TrimSpace(name); name != "" {
 				s.Volumes = append(s.Volumes, name)
@@ -35,39 +37,39 @@ func Parse(labels map[string]string) (Spec, bool, error) {
 		}
 	}
 
-	if v := labels[Prefix+"exec-pre"]; v != "" {
+	if v := labels[ExecPreKey]; v != "" {
 		argv, err := splitCommand(v)
 		if err != nil {
-			return Spec{}, false, fmt.Errorf("label %sexec-pre: %w", Prefix, err)
+			return Spec{}, fmt.Errorf("label %s: %w", ExecPreKey, err)
 		}
 		if len(argv) == 0 {
-			return Spec{}, false, fmt.Errorf("label %sexec-pre: empty command", Prefix)
+			return Spec{}, fmt.Errorf("label %s: empty command", ExecPreKey)
 		}
 		s.Exec = argv
 	}
 
-	if v := labels[Prefix+"stop"]; v != "" {
+	if v := labels[StopKey]; v != "" {
 		stop, err := strconv.ParseBool(v)
 		if err != nil {
-			return Spec{}, false, fmt.Errorf("label %sstop: %w", Prefix, err)
+			return Spec{}, fmt.Errorf("label %s: %w", StopKey, err)
 		}
 		s.Stop = stop
 	}
 
-	if v := labels[Prefix+"retention-days"]; v != "" {
+	if v := labels[RetentionDaysKey]; v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return Spec{}, false, fmt.Errorf("label %sretention-days: must be positive int, got %q", Prefix, v)
+			return Spec{}, fmt.Errorf("label %s: must be positive int, got %q", RetentionDaysKey, v)
 		}
 		s.RetentionDays = n
 	}
 
 	// Defaulting to all mounts would snapshot the live data the exec exists to avoid.
 	if len(s.Exec) > 0 && len(s.Volumes) == 0 {
-		return Spec{}, false, fmt.Errorf("label %sexec-pre requires %svolumes", Prefix, Prefix)
+		return Spec{}, fmt.Errorf("label %s requires %s", ExecPreKey, VolumesKey)
 	}
 
-	return s, true, nil
+	return s, nil
 }
 
 // splitCommand splits a command line into argv.
