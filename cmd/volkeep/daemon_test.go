@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/mount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -62,9 +63,9 @@ func snapshots(ctx context.Context, t *testing.T, d *Daemon) string {
 	t.Helper()
 	res, err := d.docker.Run(ctx, &dockerx.RunSpec{
 		Image:  d.cfg.ResticImage,
-		Args:   []string{"--no-cache", "snapshots", "--no-lock"},
+		Args:   []string{"snapshots", "--no-lock"},
 		Env:    d.env,
-		Mounts: d.repoMount(),
+		Mounts: d.workerMounts(),
 	})
 	require.NoError(t, err)
 	require.Zero(t, res.ExitCode, "snapshots probe failed: %s", res.Logs)
@@ -323,6 +324,21 @@ func labeledContainer(volumes ...string) []dockerx.Container {
 		Labels:  map[string]string{"volkeep.enable": "true"},
 		Volumes: volumes,
 	}}
+}
+
+func TestWorkerSpec_MountsCache(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDaemon(&fakeDocker{})
+
+	assert.Equal(t, []mount.Mount{
+		{Type: mount.TypeVolume, Source: workerCacheVolume, Target: workerCachePath},
+	}, d.workerSpec(restic.PruneArgs()).Mounts, "a remote repo gets the cache")
+
+	d.cfg.RepoVolume = "backup-vol"
+	assert.Equal(t, []mount.Mount{
+		{Type: mount.TypeVolume, Source: "backup-vol", Target: workerRepoPath},
+	}, d.workerSpec(restic.PruneArgs()).Mounts, "a local repo needs no cache")
 }
 
 func TestRunOnce_UnlockRunsBeforeBackups(t *testing.T) {

@@ -15,14 +15,16 @@ const (
 
 // WorkerEnv returns the env forwarded to every worker: the resolved repo
 // credentials plus the RESTIC_*, AWS_*, and RCLONE_* entries from environ.
-func WorkerEnv(repository, password string, environ []string) []string {
+func WorkerEnv(repository, password, cacheDir string, environ []string) []string {
 	env := []string{
 		"RESTIC_REPOSITORY=" + repository,
 		"RESTIC_PASSWORD=" + password,
+		"RESTIC_CACHE_DIR=" + cacheDir,
 	}
 	for _, kv := range environ {
 		if strings.HasPrefix(kv, "RESTIC_REPOSITORY=") ||
-			strings.HasPrefix(kv, "RESTIC_PASSWORD=") {
+			strings.HasPrefix(kv, "RESTIC_PASSWORD=") ||
+			strings.HasPrefix(kv, "RESTIC_CACHE_DIR=") {
 			continue
 		}
 		if strings.HasPrefix(kv, "RESTIC_") ||

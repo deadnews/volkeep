@@ -17,19 +17,22 @@ func TestWorkerEnv(t *testing.T) {
 		"RESTIC_COMPRESSION=max",
 		"RESTIC_REPOSITORY=volume:stale",
 		"RESTIC_PASSWORD=stale",
+		"RESTIC_CACHE_DIR=/stale",
 	}
 	assert.Equal(t, []string{
 		"RESTIC_REPOSITORY=s3:h/b",
 		"RESTIC_PASSWORD=pw",
+		"RESTIC_CACHE_DIR=/cache",
 		"AWS_ACCESS_KEY_ID=id",
 		"RCLONE_CONFIG_R_TYPE=s3",
 		"RESTIC_COMPRESSION=max",
-	}, WorkerEnv("s3:h/b", "pw", environ), "resolved credentials supersede the daemon's copies")
+	}, WorkerEnv("s3:h/b", "pw", "/cache", environ), "resolved credentials supersede the daemon's copies")
 
 	assert.Equal(t, []string{
 		"RESTIC_REPOSITORY=/repo",
 		"RESTIC_PASSWORD=pw",
-	}, WorkerEnv("/repo", "pw", []string{"PATH=/bin"}))
+		"RESTIC_CACHE_DIR=/cache",
+	}, WorkerEnv("/repo", "pw", "/cache", []string{"PATH=/bin"}))
 }
 
 func TestArgs(t *testing.T) {

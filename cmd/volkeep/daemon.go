@@ -39,7 +39,7 @@ func NewDaemon(cfg *Config, dx dockerClient) *Daemon {
 	return &Daemon{
 		cfg:    cfg,
 		docker: dx,
-		env:    restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, os.Environ()),
+		env:    restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, workerCachePath, os.Environ()),
 		fire:   make(chan struct{}, 1),
 	}
 }
@@ -160,7 +160,7 @@ func (d *Daemon) workerSpec(args []string, mounts ...mount.Mount) *dockerx.RunSp
 		Image:  d.cfg.ResticImage,
 		Args:   args,
 		Env:    d.env,
-		Mounts: append(d.repoMount(), mounts...),
+		Mounts: append(d.workerMounts(), mounts...),
 	}
 }
 
@@ -208,11 +208,20 @@ func (d *Daemon) stats(ctx context.Context) {
 	)
 }
 
-func (d *Daemon) repoMount() []mount.Mount {
-	if d.cfg.RepoVolume == "" {
-		return nil
+// workerMounts returns the shared restic cache, or the repo if it is a local volume.
+func (d *Daemon) workerMounts() []mount.Mount {
+	if d.cfg.RepoVolume != "" {
+		return []mount.Mount{{
+			Type:   mount.TypeVolume,
+			Source: d.cfg.RepoVolume,
+			Target: workerRepoPath,
+		}}
 	}
-	return []mount.Mount{{Type: mount.TypeVolume, Source: d.cfg.RepoVolume, Target: workerRepoPath}}
+	return []mount.Mount{{
+		Type:   mount.TypeVolume,
+		Source: workerCacheVolume,
+		Target: workerCachePath,
+	}}
 }
 
 // initRepo initializes the repo when restic reports it missing.

@@ -76,6 +76,9 @@ The daemon runs `restic` in a short-lived worker container named `volkeep-worker
 
 `VOLKEEP_RESTIC_IMAGE` is pulled once at daemon start.
 
+For a remote repo, workers share a `volkeep-cache` Docker volume holding restic's
+cache. The daemon creates it on first run. Deleting it costs one slower pass.
+
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
 

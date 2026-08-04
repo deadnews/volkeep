@@ -14,6 +14,8 @@ const (
 	defaultResticImage   = "restic/restic"
 	defaultRetentionDays = 5
 	workerRepoPath       = "/repo"
+	workerCachePath      = "/cache"
+	workerCacheVolume    = "volkeep-cache"
 	workerName           = "volkeep-worker"
 )
 
