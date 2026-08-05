@@ -164,13 +164,22 @@ func (d *Daemon) workerSpec(args []string, mounts ...mount.Mount) *dockerx.RunSp
 	}
 }
 
+// workerFailure names the culprit: restic exits non-zero on its own, while a
+// Docker failure carries an error and leaves the exit code at -1.
+func workerFailure(res dockerx.RunResult, err error) []any {
+	attrs := []any{"exit", res.ExitCode}
+	if err != nil {
+		attrs = append(attrs, "error", err)
+	}
+	return append(attrs, "logs", restic.PlainLogs(res.Logs))
+}
+
 // unlock removes locks stranded by workers that died uncleanly. Safe alongside
 // a live operation: its lock refreshes every ~5 min and never turns stale.
 func (d *Daemon) unlock(ctx context.Context) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.UnlockArgs()))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Unlock failed",
-			"exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Unlock failed", workerFailure(res, err)...)
 		return
 	}
 	if res.Logs != "" {
@@ -182,8 +191,7 @@ func (d *Daemon) unlock(ctx context.Context) {
 func (d *Daemon) check(ctx context.Context) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.CheckArgs()))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Repository check failed",
-			"exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Repository check failed", workerFailure(res, err)...)
 		return
 	}
 	slog.Info("Repository check passed")
@@ -193,7 +201,7 @@ func (d *Daemon) check(ctx context.Context) {
 func (d *Daemon) stats(ctx context.Context) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.StatsArgs()))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Stats failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Stats failed", workerFailure(res, err)...)
 		return
 	}
 	stats, ok := restic.ParseRepoStats(res.Logs)
@@ -333,8 +341,7 @@ func (d *Daemon) backupOne(ctx context.Context, g *Group, volume string, stopped
 		"exec", len(g.Exec) > 0,
 	}
 	if err != nil || (res.ExitCode != 0 && res.ExitCode != restic.ExitBackupPartial) {
-		slog.Error("Backup failed",
-			append(attrs, "exit", res.ExitCode, "error", err, "logs", restic.PlainLogs(res.Logs))...)
+		slog.Error("Backup failed", append(attrs, workerFailure(res, err)...)...)
 		return false, 0
 	}
 
@@ -361,9 +368,7 @@ func (d *Daemon) backupOne(ctx context.Context, g *Group, volume string, stopped
 func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.ForgetArgs(volume, keepDays)))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Forget failed",
-			"volume", volume, "exit", res.ExitCode, "error", err, "logs", res.Logs,
-		)
+		slog.Error("Forget failed", append([]any{"volume", volume}, workerFailure(res, err)...)...)
 		return
 	}
 	slog.Info("Forget finished", "volume", volume)
@@ -386,7 +391,7 @@ func (d *Daemon) sweep(ctx context.Context, groups []Group) {
 	}
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.SweepArgs(d.cfg.MaxAgeDays)))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Sweep failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Sweep failed", workerFailure(res, err)...)
 		return
 	}
 	slog.Info("Sweep finished")
@@ -396,7 +401,7 @@ func (d *Daemon) sweep(ctx context.Context, groups []Group) {
 func (d *Daemon) prune(ctx context.Context) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.PruneArgs()))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Prune failed", "exit", res.ExitCode, "error", err, "logs", res.Logs)
+		slog.Error("Prune failed", workerFailure(res, err)...)
 		return
 	}
 	slog.Info("Prune finished")

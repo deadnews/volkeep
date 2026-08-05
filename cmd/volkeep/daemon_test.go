@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -398,6 +399,83 @@ func TestRunOnce_CancelReportsSucceededNotFailed(t *testing.T) {
 	assert.Contains(t, logs, "succeeded=1")
 	assert.NotContains(t, logs, "Backup pass finished")
 	assert.NotContains(t, logs, "failed=", "v2 was never attempted, so it is not a failure")
+}
+
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestWorkerFailure_ResticFailureReportsExit(t *testing.T) {
+	logBuf := captureLogs(t)
+
+	fake := &fakeDocker{runFunc: func(*dockerx.RunSpec) (dockerx.RunResult, error) {
+		return dockerx.RunResult{
+			ExitCode: 1,
+			Logs:     `{"message_type":"exit_error","message":"repository is locked"}` + "\n",
+		}, nil
+	}}
+	newTestDaemon(fake).prune(context.Background())
+
+	logs := logBuf.String()
+	assert.Contains(t, logs, "Prune failed")
+	assert.Contains(t, logs, "exit=1")
+	assert.NotContains(t, logs, "error=", "restic failed, so there is no Docker error to report")
+	assert.Contains(t, logs, "repository is locked")
+}
+
+func TestWorkerFailure_DockerFailureReportsError(t *testing.T) {
+	logBuf := captureLogs(t)
+
+	fake := &fakeDocker{runFunc: func(*dockerx.RunSpec) (dockerx.RunResult, error) {
+		return dockerx.RunResult{ExitCode: -1}, errors.New("create worker: no such image")
+	}}
+	newTestDaemon(fake).prune(context.Background())
+
+	logs := logBuf.String()
+	assert.Contains(t, logs, "Prune failed")
+	assert.Contains(t, logs, "no such image")
+	assert.Contains(t, logs, "exit=-1", "-1 marks a Docker failure, keeping the field always present")
+}
+
+func TestForget_FailureKeepsVolumeAttr(t *testing.T) {
+	logBuf := captureLogs(t)
+
+	fake := &fakeDocker{runFunc: func(*dockerx.RunSpec) (dockerx.RunResult, error) {
+		return dockerx.RunResult{ExitCode: 1}, nil
+	}}
+	newTestDaemon(fake).forget(context.Background(), "v1", 5)
+
+	logs := logBuf.String()
+	assert.Contains(t, logs, "Forget failed")
+	assert.Contains(t, logs, "volume=v1")
+	assert.Contains(t, logs, "exit=1")
+}
+
+func TestBackupOne_CancelReportsWhy(t *testing.T) {
+	logBuf := captureLogs(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// What dockerx.Run really returns when the pass is cancelled mid-worker.
+	fake := &fakeDocker{runFunc: func(*dockerx.RunSpec) (dockerx.RunResult, error) {
+		cancel()
+		return dockerx.RunResult{ExitCode: -1}, errors.New("wait worker: context canceled")
+	}}
+	group := &Group{Container: dockerx.Container{ID: "c1", Running: true}, Volumes: []string{"v1"}}
+
+	ok, added := newTestDaemon(fake).backupOne(ctx, group, "v1", false)
+
+	assert.False(t, ok, "a cancelled volume has no snapshot, so it did not succeed")
+	assert.Zero(t, added)
+	logs := logBuf.String()
+	assert.Contains(t, logs, "Backup failed")
+	assert.Contains(t, logs, "volume=v1")
+	assert.Contains(t, logs, "context canceled", "the line must say why the backup did not happen")
 }
 
 func TestBackupOne_UnparsableSummaryWarns(t *testing.T) {
