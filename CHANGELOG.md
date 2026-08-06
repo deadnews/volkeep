@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.1](https://github.com/deadnews/volkeep/compare/v0.2.0...v0.2.1) - 2026-08-06
+
+### Bug fixes
+
+- _(daemon)_ drop `error=<nil>` from restic failure logs - ([33ec3fa](https://github.com/deadnews/volkeep/commit/33ec3fa863dff1255911820feb26814318b5da48))
+- _(daemon)_ stop counting cancelled volumes as failed - ([5c266dd](https://github.com/deadnews/volkeep/commit/5c266dd429810b74937493dc93bc48e2e355a75d))
+- _(discover)_ warn when a shared volume loses its `exec` or `stop` - ([631d464](https://github.com/deadnews/volkeep/commit/631d46423a98cedb695dfb3e20a2cc6205095620))
+
+### Refactor
+
+- _(label)_ make the label contract explicit - ([28ba658](https://github.com/deadnews/volkeep/commit/28ba658b7e9412e40ae62ef7645a48a9d24e976f))
+- drop dead `Volume` type - ([44fa9e6](https://github.com/deadnews/volkeep/commit/44fa9e654dd7b9be6021463c7f4ba328b8837d37))
+
+### Performance
+
+- _(daemon)_ keep `restic` cache in a shared `volkeep-cache` volume - ([7ca84e5](https://github.com/deadnews/volkeep/commit/7ca84e594e1937f000a26ba46eae64f63b0b135a))
+
+### Chores
+
+- _(docker)_ run as a numeric uid - ([5879e23](https://github.com/deadnews/volkeep/commit/5879e233b96b0578a17c8345649108cef916c080))
+- _(make)_ add `alpha` target for pre-release tags - ([d120767](https://github.com/deadnews/volkeep/commit/d12076714f7aca21e878199594354811b3603ddf))
+
 ## [0.2.0](https://github.com/deadnews/volkeep/compare/v0.1.0...v0.2.0) - 2026-07-22
 
 ### Features
