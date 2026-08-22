@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2](https://github.com/deadnews/volkeep/compare/v0.2.1...v0.2.2) - 2026-08-22
+
+### Dependencies
+
+- update to `go:1.27` - ([11c3caf](https://github.com/deadnews/volkeep/commit/11c3caf46e598b354511b7d3ef548f78a9d81f33))
+
 ## [0.2.1](https://github.com/deadnews/volkeep/compare/v0.2.0...v0.2.1) - 2026-08-06
 
 ### Bug fixes
