@@ -310,10 +310,11 @@ func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	start := time.Now()
 	res, err := d.docker.Exec(ctx, g.Container.ID, g.Exec)
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Exec failed; skipping group",
-			"container", g.Container.Name,
-			"exit", res.ExitCode, "error", err, "logs", res.Logs,
-		)
+		attrs := []any{"container", g.Container.Name, "exit", res.ExitCode}
+		if err != nil {
+			attrs = append(attrs, "error", err)
+		}
+		slog.Error("Exec failed; skipping group", append(attrs, "logs", res.Logs)...)
 		return false
 	}
 	slog.Info("Exec finished",

@@ -689,3 +689,25 @@ func TestRunGroup_ExecNotRunningSkipsGroup(t *testing.T) {
 	assert.Empty(t, fake.execed, "no exec attempt on a stopped container")
 	assert.False(t, fake.ran("backup"), "a stale dump is never snapshotted")
 }
+
+func TestRunGroup_ExecFailureOmitsNilError(t *testing.T) {
+	logBuf := captureLogs(t)
+
+	fake := &fakeDocker{execFunc: func(string, []string) (dockerx.RunResult, error) {
+		return dockerx.RunResult{ExitCode: 1, Logs: "pg_dump: connection refused\n"}, nil
+	}}
+	group := &Group{
+		Container: dockerx.Container{ID: "c1", Name: "db", Running: true},
+		Volumes:   []string{"v1"},
+		Exec:      []string{"pg_dump"},
+	}
+
+	newTestDaemon(fake).runGroup(context.Background(), group)
+
+	logs := logBuf.String()
+	assert.Contains(t, logs, "Exec failed")
+	assert.Contains(t, logs, "container=db")
+	assert.Contains(t, logs, "exit=1")
+	assert.Contains(t, logs, "connection refused")
+	assert.NotContains(t, logs, "error=", "the command failed, so there is no Docker error to report")
+}
