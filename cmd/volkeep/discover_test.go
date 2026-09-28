@@ -86,7 +86,7 @@ func TestDiscover_SharedVolume(t *testing.T) {
 	assert.Equal(t, []string{"b_data"}, got[1].Volumes, "shared volume backed up once")
 }
 
-func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
+func TestDiscover_SharedVolumeGoesToHookedContainer(t *testing.T) {
 	var logBuf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
@@ -110,8 +110,39 @@ func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
 	}
 	got := discover(containers, 7)
 
+	require.Len(t, got, 2)
+	assert.Equal(t, "postgres", got[0].Container.Name, "the exec container wins despite list order")
+	assert.Equal(t, []string{"pgdump"}, got[0].Volumes)
+	assert.Equal(t, []string{"app_data"}, got[1].Volumes, "the plain container keeps the rest")
+	assert.NotContains(t, logBuf.String(), "level=WARN", "no hook was lost")
+}
+
+func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
+	var logBuf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	containers := []dockerx.Container{
+		{
+			Name:    "app",
+			Labels:  map[string]string{"volkeep.enable": "true", "volkeep.stop": "true"},
+			Volumes: []string{"pgdump", "app_data"},
+		},
+		{
+			Name: "postgres",
+			Labels: map[string]string{
+				"volkeep.enable":   "true",
+				"volkeep.volumes":  "pgdump",
+				"volkeep.exec-pre": "pg_dump -f /dump/db.dump app",
+			},
+			Volumes: []string{"pgdata", "pgdump"},
+		},
+	}
+	got := discover(containers, 7)
+
 	require.Len(t, got, 1)
-	assert.Empty(t, got[0].Exec, "the plain container won the volume, so no dump runs")
+	assert.Empty(t, got[0].Exec, "the first hooked container won the volume, so no dump runs")
 	assert.Contains(t, logBuf.String(), "Shared volume backed up without this container's exec and stop")
 	assert.Contains(t, logBuf.String(), "claimed_by=app")
 }
