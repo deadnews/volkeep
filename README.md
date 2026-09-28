@@ -7,7 +7,7 @@
 [![CI: Main](https://img.shields.io/github/actions/workflow/status/deadnews/volkeep/main.yml?branch=main&logo=github&logoColor=white&label=main)](https://github.com/deadnews/volkeep)
 [![CI: Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/deadnews/volkeep/refs/heads/badges/coverage.json)](https://github.com/deadnews/volkeep)
 
-**[Service labels](#service-labels)** • **[Daemon configuration](#daemon-configuration)** • **[Multi-host](#multi-host)** • **[Manual trigger](#manual-trigger)** • **[Databases](#databases)** • **[Deploy](#deploy)** • **[Restore](#restore)**
+**[Labels](#labels)** • **[Configuration](#configuration)** • **[Multi-host](#multi-host)** • **[Manual trigger](#manual-trigger)** • **[Databases](#databases)** • **[Deploy](#deploy)** • **[Restore](#restore)** • **[Monitoring](#monitoring)**
 
 - Containers opt in via labels. At the scheduled time the daemon backs up
   their named volumes, optionally stopping the container for the duration
@@ -15,7 +15,7 @@
 - Backups land in a restic repository:
   a local Docker volume, S3, or an rclone remote.
 
-## Service labels
+## Labels
 
 | Label                    | Default          | Purpose                                 |
 | ------------------------ | ---------------- | --------------------------------------- |
@@ -44,7 +44,7 @@ volumes:
 - Bind mounts and anonymous volumes are skipped.
 - Snapshots are tagged with the full volume name.
 
-## Daemon configuration
+## Configuration
 
 The daemon runs `restic` in a short-lived worker container named `volkeep-worker`.
 
@@ -185,3 +185,8 @@ alias RESTIC='docker run --rm \
 RESTIC snapshots --host web-1 --tag app_data
 RESTIC restore latest --host web-1 --tag app_data --target /tmp/out
 ```
+
+## Monitoring
+
+A [Grafana dashboard](https://github.com/deadnews/grafana-dashboards/blob/main/dashboards/volkeep.json)
+charts passes, backups, and repository size from the daemon's logs.
