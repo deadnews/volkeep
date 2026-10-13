@@ -65,7 +65,11 @@ func ForgetArgs(tag string, keepDays int) []string {
 
 // SweepArgs returns argv for forgetting snapshots older than maxAgeDays.
 func SweepArgs(maxAgeDays int) []string {
-	return []string{"forget", "--keep-within", strconv.Itoa(maxAgeDays) + "d", "--quiet"}
+	return []string{
+		"forget",
+		"--keep-within", strconv.Itoa(maxAgeDays) + "d",
+		"--group-by", "", "--quiet",
+	}
 }
 
 // PruneArgs returns argv for removing data unreferenced after forgets.
