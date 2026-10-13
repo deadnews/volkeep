@@ -611,18 +611,7 @@ func TestSweep_DisabledByDefault(t *testing.T) {
 	assert.False(t, fake.ran("--keep-within"))
 }
 
-func TestSweep_Runs(t *testing.T) {
-	t.Parallel()
-
-	fake := &fakeDocker{}
-	d := newTestDaemon(fake)
-	d.cfg.MaxAgeDays = 30
-
-	d.sweep(context.Background(), []Group{{RetentionDays: 5}})
-	assert.True(t, fake.ran("--keep-within"))
-}
-
-func TestSweep_SkipsWhenRetentionReachesMaxAge(t *testing.T) {
+func TestSweep_SparesDiscoveredVolumes(t *testing.T) {
 	t.Parallel()
 
 	fake := &fakeDocker{}
@@ -630,10 +619,10 @@ func TestSweep_SkipsWhenRetentionReachesMaxAge(t *testing.T) {
 	d.cfg.MaxAgeDays = 30
 
 	d.sweep(context.Background(), []Group{
-		{RetentionDays: 5},
-		{RetentionDays: 30, Container: dockerx.Container{Name: "app"}},
+		{Volumes: []string{"a", "b"}},
+		{Volumes: []string{"c"}, RetentionDays: 30},
 	})
-	assert.False(t, fake.ran("--keep-within"), "a label retention reaching the cutoff blocks the sweep")
+	assert.Equal(t, [][]string{restic.SweepArgs(30, []string{"a", "b", "c"})}, fake.runArgs)
 }
 
 func TestRunGroup_ExecRunsOncePerGroup(t *testing.T) {

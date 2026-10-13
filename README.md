@@ -58,7 +58,7 @@ The daemon runs `restic` in a short-lived worker container named `volkeep-worker
 | `AWS_*`                  | —               | Forwarded to workers (S3 backends)       |
 | `RCLONE_*`               | —               | Forwarded to workers (rclone backends)   |
 | `VOLKEEP_RETENTION_DAYS` | `5`             | Daily snapshots to keep                  |
-| `VOLKEEP_MAX_AGE_DAYS`   | `0`             | Remove snapshots older than this         |
+| `VOLKEEP_MAX_AGE_DAYS`   | `0`             | Remove stale snapshots older than this   |
 | `VOLKEEP_CHECK`          | `true`          | Verify repo integrity after each pass    |
 | `VOLKEEP_JITTER`         | `0`             | Random pre-fire delay (e.g. `30m`)       |
 | `VOLKEEP_RESTIC_IMAGE`   | `restic/restic` | Worker image                             |
@@ -82,9 +82,9 @@ cache. The daemon creates it on first run. Deleting it costs one slower pass.
 `RESTIC_PASSWORD` is fixed at repo init. Rotating it later locks you out of
 existing snapshots. Use `restic key add` instead.
 
-`VOLKEEP_MAX_AGE_DAYS` ages out snapshots of volumes that are no longer backed up,
-whether the service is gone or its volume set changed; `0` keeps them forever.
-The cutoff must exceed retention window.
+`VOLKEEP_MAX_AGE_DAYS` ages out manual snapshots and those of dropped volumes.
+Volumes still opted in are left to retention, even while their backups fail.
+`0` disables it.
 
 ## Multi-host
 

@@ -84,7 +84,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 }
 
-// applyJitter sleeps [0, Jitter) before the pass; returns false on ctx cancel.
+// applyJitter sleeps [0, Jitter) before the pass, returning false on ctx cancel.
 func (d *Daemon) applyJitter(ctx context.Context) bool {
 	if d.cfg.Jitter <= 0 {
 		return true
@@ -258,8 +258,8 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 	return nil
 }
 
-// runGroup stops/restarts once per group;
-// forget runs post-restart to minimize downtime.
+// runGroup stops and restarts the container once per group.
+// Forget runs after the restart to minimize downtime.
 func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added uint64) {
 	if len(g.Exec) > 0 && !d.execHook(ctx, g) {
 		return 0, 0
@@ -375,22 +375,16 @@ func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
 	slog.Info("Forget finished", "volume", volume)
 }
 
-// sweep forgets snapshots older than MaxAgeDays, aging out stale volumes.
+// sweep forgets snapshots past MaxAgeDays, sparing those of discovered volumes.
 func (d *Daemon) sweep(ctx context.Context, groups []Group) {
 	if d.cfg.MaxAgeDays == 0 {
 		return
 	}
-	// Retention reaching the cutoff would lose snapshots it means to keep.
+	var volumes []string
 	for i := range groups {
-		if g := &groups[i]; g.RetentionDays >= d.cfg.MaxAgeDays {
-			slog.Error("Sweep skipped: retention reaches max age",
-				"container", g.Container.Name,
-				"retention_days", g.RetentionDays, "max_age_days", d.cfg.MaxAgeDays,
-			)
-			return
-		}
+		volumes = append(volumes, groups[i].Volumes...)
 	}
-	res, err := d.docker.Run(ctx, d.workerSpec(restic.SweepArgs(d.cfg.MaxAgeDays)))
+	res, err := d.docker.Run(ctx, d.workerSpec(restic.SweepArgs(d.cfg.MaxAgeDays, volumes)))
 	if err != nil || res.ExitCode != 0 {
 		slog.Error("Sweep failed", workerFailure(res, err)...)
 		return

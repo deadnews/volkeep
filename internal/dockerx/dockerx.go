@@ -43,7 +43,7 @@ func (c *Client) Close() error {
 }
 
 // Container is the slice of container state volkeep cares about.
-// Volumes holds named-volume mounts; bind and anonymous volumes are excluded.
+// Volumes holds named-volume mounts. Bind and anonymous volumes are excluded.
 type Container struct {
 	ID      string
 	Name    string
@@ -136,7 +136,7 @@ func (c *Client) Exec(ctx context.Context, id string, argv []string) (RunResult,
 		return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec read %s: %w", id, err)
 	}
 
-	// Stream EOF can precede the daemon recording the exit code; poll until done.
+	// Stream EOF can precede the daemon recording the exit code.
 	for {
 		ins, err := c.api.ContainerExecInspect(ctx, exec.ID)
 		if err != nil {
@@ -169,7 +169,7 @@ type RunResult struct {
 }
 
 // Run creates, starts, waits, and removes a worker container.
-// The image must already be present locally; call [Client.Pull] first.
+// The image must already be present locally. Call [Client.Pull] first.
 func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	cfg := &container.Config{Image: spec.Image, Cmd: spec.Args, Env: spec.Env}
 	hostCfg := &container.HostConfig{

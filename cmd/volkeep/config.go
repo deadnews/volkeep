@@ -94,8 +94,8 @@ func LoadConfig() (*Config, error) {
 		check = b
 	}
 
-	// `volume:<name>` mounts a Docker volume as a local repo;
-	// anything else is a restic URI passed through.
+	// `volume:<name>` mounts a Docker volume as a local repo.
+	// Anything else is a restic URI passed through.
 	resticRepo := os.Getenv("RESTIC_REPOSITORY")
 	if resticRepo == "" {
 		return nil, errors.New("RESTIC_REPOSITORY is required (restic URI or volume:<name>)")
