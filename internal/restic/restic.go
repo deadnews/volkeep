@@ -53,6 +53,7 @@ func BackupArgs(hostTag, tag string) []string {
 		"backup", "/data",
 		"--host", hostTag,
 		"--tag", tag,
+		"--group-by", "host,paths,tags",
 		"--json", "--quiet",
 	}
 }

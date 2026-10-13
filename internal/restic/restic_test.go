@@ -42,7 +42,7 @@ func TestArgs(t *testing.T) {
 	assert.Equal(t, []string{"unlock"}, UnlockArgs())
 	assert.Equal(
 		t,
-		[]string{"backup", "/data", "--host", "h1", "--tag", "rss2tg", "--json", "--quiet"},
+		[]string{"backup", "/data", "--host", "h1", "--tag", "rss2tg", "--group-by", "host,paths,tags", "--json", "--quiet"},
 		BackupArgs("h1", "rss2tg"),
 	)
 	assert.Equal(
