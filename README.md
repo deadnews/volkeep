@@ -158,32 +158,42 @@ services:
 ## Restore
 
 Backups are stored in an ordinary `restic` repository.
-Drive it with any `restic` command (`restore`, `mount`).
 See the [restic docs](https://restic.readthedocs.io/en/stable/050_restore.html).
 
-Local:
+- Snapshots store each volume under `/data`.
+- `--env-file .env` reuses the compose project's credentials.
+
+### Browse and recover files
 
 ```sh
-alias RESTIC='docker run --rm \
-  -e RESTIC_PASSWORD \
-  -v volkeep_backup:/repo \
-  restic/restic -r /repo'
+# Remote repository
+alias RESTIC='docker run --rm --env-file .env restic/restic -r s3:s3.host.com/bucket/web-1'
+# Local repository
+alias RESTIC='docker run --rm --env-file .env -v volkeep_backup:/repo restic/restic -r /repo'
 
-RESTIC snapshots --tag app_data
-RESTIC restore latest --tag app_data --target /tmp/out
+RESTIC snapshots
+RESTIC ls latest --tag app_data
+RESTIC dump latest /data/config.yml --tag app_data > config.yml
 ```
 
-Remote:
+### Restore a volume in place
 
 ```sh
-alias RESTIC='docker run --rm \
-  -e RESTIC_PASSWORD \
-  -e AWS_ACCESS_KEY_ID \
-  -e AWS_SECRET_ACCESS_KEY \
-  restic/restic -r s3:s3.host.com/bucket/web-1'
+# 1. Stop the containers using the volume, and volkeep if near its schedule
+docker stop app volkeep
 
-RESTIC snapshots --host web-1 --tag app_data
-RESTIC restore latest --host web-1 --tag app_data --target /tmp/out
+# 2. Back up the current state under its own tag
+docker run --rm --env-file .env -v app_data:/data:ro \
+    restic/restic -r s3:s3.host.com/bucket/web-1 \
+    backup /data --tag app_data-pre-restore
+
+# 3. Restore; --delete removes files absent from the snapshot
+docker run --rm --env-file .env -v app_data:/data \
+    restic/restic -r s3:s3.host.com/bucket/web-1 \
+    restore latest:/data --tag app_data --target /data --delete
+
+# 4. Start them
+docker start app volkeep
 ```
 
 ## Monitoring
