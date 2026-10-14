@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.3](https://github.com/deadnews/volkeep/compare/v0.2.2...v0.2.3) - 2026-10-14
+
+### Bug fixes
+
+- _(daemon)_ spare discovered volumes in the sweep - ([a4b7c4a](https://github.com/deadnews/volkeep/commit/a4b7c4aa0c11c3ea006153cad829f2de492884b0))
+- _(daemon)_ drop `error=<nil>` from exec failure logs - ([7cc344a](https://github.com/deadnews/volkeep/commit/7cc344a2d81b54fc7cc2f5125441fc7888adac9a))
+- _(discover)_ let a hooked container claim a shared volume first - ([fb7bc37](https://github.com/deadnews/volkeep/commit/fb7bc37bccbe2ba1919207a647b8c8ebbb183130))
+- _(restic)_ expire snapshots of any host or path in the sweep - ([b229afc](https://github.com/deadnews/volkeep/commit/b229afc88d20552da64ca404cdb35e5718ae6835))
+
+### Documentation
+
+- _(readme)_ rewrite restore section - ([f29cc89](https://github.com/deadnews/volkeep/commit/f29cc8912a3155c80686b7fbefc87979daf3153b))
+- _(readme)_ link the grafana dashboard - ([c478064](https://github.com/deadnews/volkeep/commit/c47806408597009d81af6879863c72eab56b6e11))
+
+### Performance
+
+- _(restic)_ pick each volume's own snapshot as backup parent - ([d9e06f2](https://github.com/deadnews/volkeep/commit/d9e06f2ddc3dbdd160444d8509cedd90dfbf9fbf))
+
+### Chores
+
+- _(make)_ default `tag` to bumped version - ([3c2cf10](https://github.com/deadnews/volkeep/commit/3c2cf1005d051a900ed0672352b7202fc0e80ac2))
+
 ## [0.2.2](https://github.com/deadnews/volkeep/compare/v0.2.1...v0.2.2) - 2026-08-22
 
 ### Dependencies
