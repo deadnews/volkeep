@@ -36,10 +36,11 @@ type Daemon struct {
 
 // NewDaemon constructs a Daemon.
 func NewDaemon(cfg *Config, dx dockerClient) *Daemon {
+	env := restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, workerCachePath, os.Environ())
 	return &Daemon{
 		cfg:    cfg,
 		docker: dx,
-		env:    restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, workerCachePath, os.Environ()),
+		env:    env,
 		fire:   make(chan struct{}, 1),
 	}
 }
@@ -58,7 +59,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 		if !d.docker.HasImage(ctx, d.cfg.ResticImage) {
 			return fmt.Errorf("pull restic image: %w", err)
 		}
-		slog.Warn("Failed to pull image; using local", "image", d.cfg.ResticImage, "error", err)
+		slog.Warn("Failed to pull image; using local",
+			"image", d.cfg.ResticImage, "error", err)
 	}
 	if err := d.initRepo(ctx); err != nil {
 		return err
@@ -89,7 +91,7 @@ func (d *Daemon) applyJitter(ctx context.Context) bool {
 	if d.cfg.Jitter <= 0 {
 		return true
 	}
-	delay := time.Duration(rand.Int64N(int64(d.cfg.Jitter))) //nolint:gosec // jitter is non-security
+	delay := time.Duration(rand.Int64N(int64(d.cfg.Jitter))) //nolint:gosec // non-security
 	slog.Info("Jitter delay", "duration", delay)
 	select {
 	case <-ctx.Done():
@@ -269,7 +271,8 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added u
 	if shouldStop {
 		slog.Info("Stopping container", "container", g.Container.Name)
 		if err := d.docker.Stop(ctx, g.Container.ID); err != nil {
-			slog.Error("Failed to stop container; skipping group", "container", g.Container.Name, "error", err)
+			slog.Error("Failed to stop container; skipping group",
+				"container", g.Container.Name, "error", err)
 			return 0, 0
 		}
 	}
@@ -289,7 +292,8 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added u
 		// Restart even on shutdown, or a SIGTERM mid-pass strands the container.
 		startCtx := context.WithoutCancel(ctx)
 		if err := d.docker.Start(startCtx, g.Container.ID); err != nil {
-			slog.Error("Failed to restart container", "container", g.Container.Name, "error", err)
+			slog.Error("Failed to restart container",
+				"container", g.Container.Name, "error", err)
 		}
 	}
 
@@ -304,7 +308,8 @@ func (d *Daemon) runGroup(ctx context.Context, g *Group) (succeeded int, added u
 // execHook runs the pre-backup command and reports whether the group can proceed.
 func (d *Daemon) execHook(ctx context.Context, g *Group) bool {
 	if !g.Container.Running {
-		slog.Error("Exec skipped: container not running; skipping group", "container", g.Container.Name)
+		slog.Error("Exec skipped: container not running; skipping group",
+			"container", g.Container.Name)
 		return false
 	}
 	start := time.Now()
@@ -369,7 +374,8 @@ func (d *Daemon) backupOne(ctx context.Context, g *Group, volume string, stopped
 func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.ForgetArgs(volume, keepDays)))
 	if err != nil || res.ExitCode != 0 {
-		slog.Error("Forget failed", append([]any{"volume", volume}, workerFailure(res, err)...)...)
+		slog.Error("Forget failed",
+			append([]any{"volume", volume}, workerFailure(res, err)...)...)
 		return
 	}
 	slog.Info("Forget finished", "volume", volume)

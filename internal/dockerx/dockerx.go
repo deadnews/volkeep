@@ -133,21 +133,24 @@ func (c *Client) Exec(ctx context.Context, id string, argv []string) (RunResult,
 
 	var buf bytes.Buffer
 	if _, err := stdcopy.StdCopy(&buf, &buf, resp.Reader); err != nil {
-		return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec read %s: %w", id, err)
+		return RunResult{ExitCode: -1, Logs: buf.String()},
+			fmt.Errorf("exec read %s: %w", id, err)
 	}
 
 	// Stream EOF can precede the daemon recording the exit code.
 	for {
 		ins, err := c.api.ContainerExecInspect(ctx, exec.ID)
 		if err != nil {
-			return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec inspect %s: %w", id, err)
+			return RunResult{ExitCode: -1, Logs: buf.String()},
+				fmt.Errorf("exec inspect %s: %w", id, err)
 		}
 		if !ins.Running {
 			return RunResult{ExitCode: ins.ExitCode, Logs: buf.String()}, nil
 		}
 		select {
 		case <-ctx.Done():
-			return RunResult{ExitCode: -1, Logs: buf.String()}, fmt.Errorf("exec wait %s: %w", id, ctx.Err())
+			return RunResult{ExitCode: -1, Logs: buf.String()},
+				fmt.Errorf("exec wait %s: %w", id, ctx.Err())
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
@@ -203,7 +206,8 @@ func (c *Client) Run(ctx context.Context, spec *RunSpec) (RunResult, error) {
 	statusCh, errCh := c.api.ContainerWait(ctx, id, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
-		return RunResult{ExitCode: -1, Logs: logs}, errors.Join(fmt.Errorf("wait worker: %w", err), logErr)
+		return RunResult{ExitCode: -1, Logs: logs},
+			errors.Join(fmt.Errorf("wait worker: %w", err), logErr)
 	case s := <-statusCh:
 		if logErr != nil {
 			slog.Warn("Failed to collect worker logs", "error", logErr)

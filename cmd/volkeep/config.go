@@ -66,7 +66,9 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("VOLKEEP_MAX_AGE_DAYS: must be non-negative int, got %q", v)
 		}
 		if n > 0 && n <= retention {
-			return nil, fmt.Errorf("VOLKEEP_MAX_AGE_DAYS (%d) must exceed VOLKEEP_RETENTION_DAYS (%d)", n, retention)
+			return nil, fmt.Errorf(
+				"VOLKEEP_MAX_AGE_DAYS (%d) must exceed VOLKEEP_RETENTION_DAYS (%d)",
+				n, retention)
 		}
 		maxAge = n
 	}
@@ -123,9 +125,10 @@ func LoadConfig() (*Config, error) {
 
 // NextFire returns the next time-of-day instant after now.
 func (c *Config) NextFire(now time.Time) time.Time {
-	next := time.Date(now.Year(), now.Month(), now.Day(), c.Hour, c.Minute, 0, 0, now.Location())
+	y, m, d := now.Date()
+	next := time.Date(y, m, d, c.Hour, c.Minute, 0, 0, now.Location())
 	if !next.After(now) {
-		next = time.Date(now.Year(), now.Month(), now.Day()+1, c.Hour, c.Minute, 0, 0, now.Location())
+		next = time.Date(y, m, d+1, c.Hour, c.Minute, 0, 0, now.Location())
 	}
 	return next
 }

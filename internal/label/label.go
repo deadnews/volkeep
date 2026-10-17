@@ -59,7 +59,8 @@ func Parse(labels map[string]string) (Spec, error) {
 	if v := labels[RetentionDaysKey]; v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return Spec{}, fmt.Errorf("label %s: must be positive int, got %q", RetentionDaysKey, v)
+			return Spec{}, fmt.Errorf("label %s: must be positive int, got %q",
+				RetentionDaysKey, v)
 		}
 		s.RetentionDays = n
 	}

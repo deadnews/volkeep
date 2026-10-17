@@ -26,12 +26,14 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 	for _, c := range containers {
 		spec, err := label.Parse(c.Labels)
 		if err != nil {
-			slog.Error("Failed to parse labels; skipping container", "container", c.Name, "error", err)
+			slog.Error("Failed to parse labels; skipping container",
+				"container", c.Name, "error", err)
 			continue
 		}
 		vols, err := pickVolumes(c, spec.Volumes)
 		if err != nil {
-			slog.Error("Failed to resolve volumes; skipping container", "container", c.Name, "error", err)
+			slog.Error("Failed to resolve volumes; skipping container",
+				"container", c.Name, "error", err)
 			continue
 		}
 		g := Group{
@@ -58,7 +60,9 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 		for _, name := range g.Volumes {
 			if owner, dup := claimed[name]; dup {
 				if g.hooked() {
-					slog.Warn("Shared volume backed up without this container's exec and stop", "volume", name, "container", g.Container.Name, "claimed_by", owner)
+					slog.Warn(
+						"Shared volume backed up without this container's exec and stop",
+						"volume", name, "container", g.Container.Name, "claimed_by", owner)
 				}
 				continue
 			}
@@ -66,7 +70,8 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 			kept = append(kept, name)
 		}
 		if len(kept) == 0 {
-			slog.Info("Skipping container: no volumes to back up", "container", g.Container.Name)
+			slog.Info("Skipping container: no volumes to back up",
+				"container", g.Container.Name)
 			continue
 		}
 		g.Volumes = kept
@@ -83,7 +88,9 @@ func pickVolumes(c dockerx.Container, wanted []string) ([]string, error) {
 	}
 	for _, name := range wanted {
 		if !slices.Contains(c.Volumes, name) {
-			return nil, fmt.Errorf("label %s references %q which is not mounted as a named volume", label.VolumesKey, name)
+			return nil, fmt.Errorf(
+				"label %s references %q which is not mounted as a named volume",
+				label.VolumesKey, name)
 		}
 	}
 	return wanted, nil
