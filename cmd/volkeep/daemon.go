@@ -210,7 +210,7 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 		return nil
 	case restic.ExitRepoMissing:
 	default:
-		return fmt.Errorf("probe repo failed (exit %d): %s", probe.ExitCode, probe.Logs)
+		return fmt.Errorf("probe repo: exit %d: %s", probe.ExitCode, probe.Logs)
 	}
 
 	slog.Info("Initializing restic repository")
@@ -219,7 +219,7 @@ func (d *Daemon) initRepo(ctx context.Context) error {
 		return fmt.Errorf("init repo: %w", err)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("restic init failed (exit %d): %s", res.ExitCode, res.Logs)
+		return fmt.Errorf("init repo: exit %d: %s", res.ExitCode, res.Logs)
 	}
 	return nil
 }
