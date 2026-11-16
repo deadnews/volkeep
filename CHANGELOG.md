@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.4](https://github.com/deadnews/volkeep/compare/v0.2.3...v0.2.4) - 2026-11-16
+
+### Bug fixes
+
+- _(daemon)_ fold jitter into the scheduled fire time - ([f5172c6](https://github.com/deadnews/volkeep/commit/f5172c6cd0fb8af243f6a4b734949de4f4dc8409))
+- _(daemon)_ spare volumes of invalid containers in the sweep - ([bf8d892](https://github.com/deadnews/volkeep/commit/bf8d8927634619953f3dce1f7f27567495da4b8a))
+
+### Refactor
+
+- _(daemon)_ drop failure framing from repo init errors - ([a243b74](https://github.com/deadnews/volkeep/commit/a243b74eec34e182c974d4f1160f2deddc4d5440))
+- _(daemon)_ use `time.After` for the schedule timer - ([ff2bdae](https://github.com/deadnews/volkeep/commit/ff2bdae99a579cc812743f59e9b337b84852bb69))
+- _(daemon)_ take the trigger channel in `Run`, drop `Trigger` - ([843fee8](https://github.com/deadnews/volkeep/commit/843fee8ef0ae1ed592379804080773da23952f56))
+
+### Testing
+
+- reuse `captureLogs` for log assertions - ([70a7e26](https://github.com/deadnews/volkeep/commit/70a7e2600efab6b102cc7cb10793e83db44c77a8))
+
+### Styling
+
+- break long lines - ([06bcbdc](https://github.com/deadnews/volkeep/commit/06bcbdcd4bf0c6c79c2afb74388161f6e851ff08))
+
+### Chores
+
+- _(prek)_ build `golangci-lint` with a prek-managed go - ([03128d3](https://github.com/deadnews/volkeep/commit/03128d3189a7248cd81ff250096024a0e6f555f0))
+
 ## [0.2.3](https://github.com/deadnews/volkeep/compare/v0.2.2...v0.2.3) - 2026-10-14
 
 ### Bug fixes
