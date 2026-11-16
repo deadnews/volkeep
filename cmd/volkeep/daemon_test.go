@@ -607,7 +607,7 @@ func TestSweep_DisabledByDefault(t *testing.T) {
 	fake := &fakeDocker{}
 	d := newTestDaemon(fake)
 
-	d.sweep(context.Background(), []Group{{RetentionDays: 5}})
+	d.sweep(context.Background(), []Group{{RetentionDays: 5}}, nil)
 	assert.False(t, fake.ran("--keep-within"))
 }
 
@@ -621,8 +621,28 @@ func TestSweep_SparesDiscoveredVolumes(t *testing.T) {
 	d.sweep(context.Background(), []Group{
 		{Volumes: []string{"a", "b"}},
 		{Volumes: []string{"c"}, RetentionDays: 30},
+	}, []string{"d"})
+	assert.Equal(t, [][]string{restic.SweepArgs(30, []string{"a", "b", "c", "d"})}, fake.runArgs)
+}
+
+func TestRunOnce_SweepSparesSkippedContainer(t *testing.T) {
+	t.Parallel()
+
+	containers := labeledContainer("v1")
+	containers = append(containers, dockerx.Container{
+		ID:      "c2",
+		Running: true,
+		Labels:  map[string]string{"volkeep.enable": "true", "volkeep.stop": "maybe"},
+		Volumes: []string{"v2"},
 	})
-	assert.Equal(t, [][]string{restic.SweepArgs(30, []string{"a", "b", "c"})}, fake.runArgs)
+	fake := &fakeDocker{containers: containers}
+	d := newTestDaemon(fake)
+	d.cfg.MaxAgeDays = 30
+
+	d.runOnce(context.Background(), "manual")
+
+	assert.Contains(t, fake.runArgs, restic.SweepArgs(30, []string{"v1", "v2"}),
+		"v2 is still opted in, so the sweep spares it despite the bad label")
 }
 
 func TestRunGroup_ExecRunsOncePerGroup(t *testing.T) {

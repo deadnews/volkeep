@@ -20,20 +20,22 @@ type Group struct {
 	Stop          bool
 }
 
-// discover resolves labeled containers into backup groups, skipping invalid ones.
-func discover(containers []dockerx.Container, defaultRetention int) []Group {
+// discover resolves labeled containers into backup groups and the volumes of invalid ones.
+func discover(containers []dockerx.Container, defaultRetention int) (groups []Group, skipped []string) {
 	var hooked, plain []Group
 	for _, c := range containers {
 		spec, err := label.Parse(c.Labels)
 		if err != nil {
 			slog.Error("Failed to parse labels; skipping container",
 				"container", c.Name, "error", err)
+			skipped = append(skipped, c.Volumes...)
 			continue
 		}
 		vols, err := pickVolumes(c, spec.Volumes)
 		if err != nil {
 			slog.Error("Failed to resolve volumes; skipping container",
 				"container", c.Name, "error", err)
+			skipped = append(skipped, c.Volumes...)
 			continue
 		}
 		g := Group{
@@ -52,7 +54,7 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 
 	// Hooked groups claim first, so a shared volume keeps its exec or stop.
 	candidates := slices.Concat(hooked, plain)
-	out := make([]Group, 0, len(candidates))
+	groups = make([]Group, 0, len(candidates))
 	claimed := make(map[string]string)
 	for i := range candidates {
 		g := &candidates[i]
@@ -75,9 +77,9 @@ func discover(containers []dockerx.Container, defaultRetention int) []Group {
 			continue
 		}
 		g.Volumes = kept
-		out = append(out, *g)
+		groups = append(groups, *g)
 	}
-	return out
+	return groups, skipped
 }
 
 func (g *Group) hooked() bool { return len(g.Exec) > 0 || g.Stop }

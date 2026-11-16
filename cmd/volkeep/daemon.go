@@ -108,7 +108,7 @@ func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 		slog.Error("Failed to discover containers", "error", err)
 		return
 	}
-	groups := discover(raw, d.cfg.RetentionDays)
+	groups, skipped := discover(raw, d.cfg.RetentionDays)
 	slog.Info("Backup pass starting", "containers", len(groups), "trigger", trigger)
 	d.unlock(ctx)
 
@@ -136,7 +136,7 @@ func (d *Daemon) runOnce(ctx context.Context, trigger string) {
 	}
 
 	if succeeded > 0 {
-		d.sweep(ctx, groups)
+		d.sweep(ctx, groups, skipped)
 		d.prune(ctx)
 	}
 	if d.cfg.Check && ctx.Err() == nil {
@@ -381,8 +381,8 @@ func (d *Daemon) forget(ctx context.Context, volume string, keepDays int) {
 	slog.Info("Forget finished", "volume", volume)
 }
 
-// sweep forgets snapshots past MaxAgeDays, sparing those of discovered volumes.
-func (d *Daemon) sweep(ctx context.Context, groups []Group) {
+// sweep forgets snapshots past MaxAgeDays, sparing those of opted-in volumes.
+func (d *Daemon) sweep(ctx context.Context, groups []Group, skipped []string) {
 	if d.cfg.MaxAgeDays == 0 {
 		return
 	}
@@ -390,6 +390,8 @@ func (d *Daemon) sweep(ctx context.Context, groups []Group) {
 	for i := range groups {
 		volumes = append(volumes, groups[i].Volumes...)
 	}
+	// A container skipped as invalid is still opted in.
+	volumes = append(volumes, skipped...)
 	res, err := d.docker.Run(ctx, d.workerSpec(restic.SweepArgs(d.cfg.MaxAgeDays, volumes)))
 	if err != nil || res.ExitCode != 0 {
 		slog.Error("Sweep failed", workerFailure(res, err)...)

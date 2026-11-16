@@ -25,7 +25,7 @@ func TestDiscover_SinglePerContainer(t *testing.T) {
 			Volumes: []string{"rss2tg_data"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 	require.Len(t, got, 1)
 	assert.Equal(t, 3, got[0].RetentionDays)
 	assert.True(t, got[0].Stop)
@@ -42,7 +42,7 @@ func TestDiscover_MultiVolume(t *testing.T) {
 			Volumes: []string{"app_data", "app_cache"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 	require.Len(t, got, 1)
 	assert.Equal(t, []string{"app_data", "app_cache"}, got[0].Volumes, "one group holds both volumes")
 }
@@ -60,7 +60,7 @@ func TestDiscover_VolumesWhitelist(t *testing.T) {
 			Volumes: []string{"app_data", "app_cache"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 	require.Len(t, got, 1)
 	assert.Equal(t, []string{"app_data"}, got[0].Volumes)
 }
@@ -80,7 +80,7 @@ func TestDiscover_SharedVolume(t *testing.T) {
 			Volumes: []string{"shared", "b_data"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 	require.Len(t, got, 2)
 	assert.Equal(t, "a", got[0].Container.Name, "first owner wins the shared volume")
 	assert.Equal(t, []string{"b_data"}, got[1].Volumes, "shared volume backed up once")
@@ -108,7 +108,7 @@ func TestDiscover_SharedVolumeGoesToHookedContainer(t *testing.T) {
 			Volumes: []string{"pgdata", "pgdump"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 
 	require.Len(t, got, 2)
 	assert.Equal(t, "postgres", got[0].Container.Name, "the exec container wins despite list order")
@@ -139,7 +139,7 @@ func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
 			Volumes: []string{"pgdata", "pgdump"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 
 	require.Len(t, got, 1)
 	assert.Empty(t, got[0].Exec, "the first hooked container won the volume, so no dump runs")
@@ -185,9 +185,10 @@ func TestDiscover_AllVolumesShared(t *testing.T) {
 			Volumes: []string{"shared"},
 		},
 	}
-	got := discover(containers, 7)
+	got, skipped := discover(containers, 7)
 	require.Len(t, got, 1, "a container left with no volumes yields no group")
 	assert.Equal(t, "a", got[0].Container.Name)
+	assert.Empty(t, skipped, "its volume is still backed up, so nothing was skipped")
 }
 
 func TestDiscover_MissingVolume(t *testing.T) {
@@ -203,7 +204,9 @@ func TestDiscover_MissingVolume(t *testing.T) {
 			Volumes: []string{"other"},
 		},
 	}
-	assert.Empty(t, discover(containers, 7), "misconfigured container is skipped, not fatal")
+	got, skipped := discover(containers, 7)
+	assert.Empty(t, got, "misconfigured container is skipped, not fatal")
+	assert.Equal(t, []string{"other"}, skipped)
 }
 
 func TestDiscover_Exec(t *testing.T) {
@@ -220,7 +223,7 @@ func TestDiscover_Exec(t *testing.T) {
 			Volumes: []string{"app_data", "app_dump"},
 		},
 	}
-	got := discover(containers, 7)
+	got, _ := discover(containers, 7)
 	require.Len(t, got, 1)
 	assert.Equal(t, []string{"app_dump"}, got[0].Volumes)
 	assert.Equal(t, []string{"pg_dump", "-Fc", "-f", "/dump/db.dump", "app"}, got[0].Exec)
@@ -239,5 +242,7 @@ func TestDiscover_ExecWithoutVolumes(t *testing.T) {
 			Volumes: []string{"app_data"},
 		},
 	}
-	assert.Empty(t, discover(containers, 7), "exec without an explicit whitelist is skipped, not fatal")
+	got, skipped := discover(containers, 7)
+	assert.Empty(t, got, "exec without an explicit whitelist is skipped, not fatal")
+	assert.Equal(t, []string{"app_data"}, skipped)
 }
