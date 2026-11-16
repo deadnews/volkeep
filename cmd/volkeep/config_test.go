@@ -162,6 +162,22 @@ func TestNextFire(t *testing.T) {
 	}
 }
 
+func TestNextFire_Jitter(t *testing.T) {
+	t.Parallel()
+
+	c := &Config{Hour: 3, Minute: 0, Jitter: 30 * time.Minute}
+	now := time.Date(2026, 5, 26, 2, 0, 0, 0, time.UTC)
+	base := time.Date(2026, 5, 26, 3, 0, 0, 0, time.UTC)
+
+	delayed := false
+	for range 100 {
+		got := c.NextFire(now)
+		assert.WithinRange(t, got, base, base.Add(c.Jitter))
+		delayed = delayed || got.After(base)
+	}
+	assert.True(t, delayed, "the fire time carries the jitter")
+}
+
 func TestNextFire_DST(t *testing.T) {
 	t.Parallel()
 

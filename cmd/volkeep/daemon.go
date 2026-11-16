@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"os"
 	"time"
 
@@ -60,30 +59,12 @@ func (d *Daemon) Run(ctx context.Context, trigger <-chan os.Signal) error {
 			t.Stop()
 			return nil
 		case <-t.C:
-			if !d.applyJitter(ctx) {
-				return nil
-			}
 			d.runOnce(ctx, "schedule")
 		case <-trigger:
 			t.Stop()
 			slog.Info("Manual trigger")
 			d.runOnce(ctx, "manual")
 		}
-	}
-}
-
-// applyJitter sleeps [0, Jitter) before the pass, returning false on ctx cancel.
-func (d *Daemon) applyJitter(ctx context.Context) bool {
-	if d.cfg.Jitter <= 0 {
-		return true
-	}
-	delay := time.Duration(rand.Int64N(int64(d.cfg.Jitter))) //nolint:gosec // non-security
-	slog.Info("Jitter delay", "duration", delay)
-	select {
-	case <-ctx.Done():
-		return false
-	case <-time.After(delay):
-		return true
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"strconv"
 	"strings"
@@ -123,12 +124,15 @@ func LoadConfig() (*Config, error) {
 	}, nil
 }
 
-// NextFire returns the next time-of-day instant after now.
+// NextFire returns the next time-of-day instant after now, delayed by up to Jitter.
 func (c *Config) NextFire(now time.Time) time.Time {
 	y, m, d := now.Date()
 	next := time.Date(y, m, d, c.Hour, c.Minute, 0, 0, now.Location())
 	if !next.After(now) {
 		next = time.Date(y, m, d+1, c.Hour, c.Minute, 0, 0, now.Location())
+	}
+	if c.Jitter > 0 {
+		next = next.Add(rand.N(c.Jitter)) //nolint:gosec // non-security
 	}
 	return next
 }
