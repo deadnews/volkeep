@@ -53,15 +53,12 @@ func (d *Daemon) Run(ctx context.Context, trigger <-chan os.Signal) error {
 	for {
 		next := d.cfg.NextFire(time.Now())
 		slog.Info("Next backup scheduled", "at", next.Format(time.RFC3339))
-		t := time.NewTimer(time.Until(next))
 		select {
 		case <-ctx.Done():
-			t.Stop()
 			return nil
-		case <-t.C:
+		case <-time.After(time.Until(next)):
 			d.runOnce(ctx, "schedule")
 		case <-trigger:
-			t.Stop()
 			slog.Info("Manual trigger")
 			d.runOnce(ctx, "manual")
 		}
