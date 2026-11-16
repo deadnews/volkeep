@@ -31,30 +31,16 @@ type Daemon struct {
 	cfg    *Config
 	docker dockerClient
 	env    []string // precomputed restic env passed to every worker
-	fire   chan struct{}
 }
 
 // NewDaemon constructs a Daemon.
 func NewDaemon(cfg *Config, dx dockerClient) *Daemon {
 	env := restic.WorkerEnv(cfg.ResticRepo, cfg.ResticPassword, workerCachePath, os.Environ())
-	return &Daemon{
-		cfg:    cfg,
-		docker: dx,
-		env:    env,
-		fire:   make(chan struct{}, 1),
-	}
+	return &Daemon{cfg: cfg, docker: dx, env: env}
 }
 
-// Trigger requests an out-of-schedule pass; non-blocking, coalesces.
-func (d *Daemon) Trigger() {
-	select {
-	case d.fire <- struct{}{}:
-	default:
-	}
-}
-
-// Run blocks until ctx is cancelled, firing one pass per schedule tick or Trigger.
-func (d *Daemon) Run(ctx context.Context) error {
+// Run blocks until ctx is cancelled, firing one pass per schedule tick or trigger signal.
+func (d *Daemon) Run(ctx context.Context, trigger <-chan os.Signal) error {
 	if err := d.docker.Pull(ctx, d.cfg.ResticImage); err != nil {
 		if !d.docker.HasImage(ctx, d.cfg.ResticImage) {
 			return fmt.Errorf("pull restic image: %w", err)
@@ -78,7 +64,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				return nil
 			}
 			d.runOnce(ctx, "schedule")
-		case <-d.fire:
+		case <-trigger:
 			t.Stop()
 			slog.Info("Manual trigger")
 			d.runOnce(ctx, "manual")

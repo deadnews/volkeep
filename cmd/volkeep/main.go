@@ -39,16 +39,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	d := NewDaemon(cfg, dx)
+	trigger := make(chan os.Signal, 1)
+	signal.Notify(trigger, syscall.SIGUSR1)
+	defer signal.Stop(trigger)
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGUSR1)
-	defer signal.Stop(sig)
-	go func() {
-		for range sig {
-			d.Trigger()
-		}
-	}()
-
-	return d.Run(ctx)
+	return NewDaemon(cfg, dx).Run(ctx, trigger)
 }
