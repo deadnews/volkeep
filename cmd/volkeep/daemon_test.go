@@ -83,14 +83,20 @@ func waitDiscoverable(ctx context.Context, t *testing.T, dx *dockerx.Client, id 
 	}, 10*time.Second, 100*time.Millisecond, "started container must show up in the daemon's listing")
 }
 
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
 func TestDaemon_RunOnce(t *testing.T) {
 	skipIfNoTestcontainers(t)
 	ctx, dx, d := setupDaemon(t)
 
-	var logBuf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logBuf := captureLogs(t)
 
 	app, err := testcontainers.Run(ctx, "busybox:musl",
 		testcontainers.WithCmd("sh", "-c", "echo hello > /data/file.txt; trap 'exit 0' TERM; sleep 3600 & wait"),
@@ -373,10 +379,7 @@ func TestRunOnce_UnlockFailureDoesNotBlockPass(t *testing.T) {
 }
 
 func TestRunOnce_CancelReportsSucceededNotFailed(t *testing.T) {
-	var logBuf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logBuf := captureLogs(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -399,15 +402,6 @@ func TestRunOnce_CancelReportsSucceededNotFailed(t *testing.T) {
 	assert.Contains(t, logs, "succeeded=1")
 	assert.NotContains(t, logs, "Backup pass finished")
 	assert.NotContains(t, logs, "failed=", "v2 was never attempted, so it is not a failure")
-}
-
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
 }
 
 func TestWorkerFailure_ResticFailureReportsExit(t *testing.T) {
@@ -479,10 +473,7 @@ func TestBackupOne_CancelReportsWhy(t *testing.T) {
 }
 
 func TestBackupOne_UnparsableSummaryWarns(t *testing.T) {
-	var logBuf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logBuf := captureLogs(t)
 
 	fake := &fakeDocker{runFunc: func(*dockerx.RunSpec) (dockerx.RunResult, error) {
 		return dockerx.RunResult{Logs: `{"message_type":"snapshot"}` + "\n"}, nil

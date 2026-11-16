@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"log/slog"
 	"testing"
 
 	"github.com/deadnews/volkeep/internal/dockerx"
@@ -87,10 +85,7 @@ func TestDiscover_SharedVolume(t *testing.T) {
 }
 
 func TestDiscover_SharedVolumeGoesToHookedContainer(t *testing.T) {
-	var logBuf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logBuf := captureLogs(t)
 
 	containers := []dockerx.Container{
 		{
@@ -118,10 +113,7 @@ func TestDiscover_SharedVolumeGoesToHookedContainer(t *testing.T) {
 }
 
 func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
-	var logBuf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logBuf := captureLogs(t)
 
 	containers := []dockerx.Container{
 		{
@@ -148,10 +140,7 @@ func TestDiscover_SharedVolumeLosingExecWarns(t *testing.T) {
 }
 
 func TestDiscover_SharedVolumeWithoutExecIsQuiet(t *testing.T) {
-	var logBuf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logBuf := captureLogs(t)
 
 	containers := []dockerx.Container{
 		{
